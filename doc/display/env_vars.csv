@@ -1,0 +1,15 @@
+Datasets,Data Source,Resolution,Transformations used,Variables derived
+Flowering observations,SeasonWatch,temporal: ~once every two weeks,,Flowering binary and ordinal
+,https://www.seasonwatch.in/,spatial: tree-level observations,,
+Precipitation,ERA5-Land,"temporal: hourly, aggregated to fortnightly",Sum,"Total precipitation, DryDays"
+,https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land?tab=overview,spatial: 11.1 km grid,,
+Temperature,ERA5-Land,"temporal: hourly, aggregated to fortnightly","Max, min, mean","Max temp, min temp, mean temp"
+,https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land?tab=overview,spatial: 11.1 km grid,,
+Soil Moisture,ERA5-Land,"temporal: hourly, aggregated to fortnightly","Mean (of total column depth at each time step), Mean (hourly -> Daily -> Fortnightly)",Mean SM
+,https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land?tab=overview,spatial: 11.1 km grid,,
+Solar radiation,ERA5-Land,"temporal: hourly, aggregated to fortnightly",Sum (hourly -> daily -> Fortnightly),SolarRad
+,https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land?tab=overview,spatial: 11.1 km grid,,
+elevation,SRTM,temporal: no change,terrain functions,"Elevation, slope, aspect"
+,https://www.usgs.gov/centers/eros/science/usgs-eros-archive-digital-elevation-shuttle-radar-topography-mission-srtm-1,spatial: 30 m grid,,
+urbanisation,NASA nightlights,temporal: no change,,urbanisation
+,https://earthobservatory.nasa.gov/features/NightLights,spatial: 0.5 km grid,,

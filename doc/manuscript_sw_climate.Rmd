@@ -1,0 +1,724 @@
+---
+title: ""
+output:
+    bookdown::word_document2: 
+      reference_docx: word-styles-reference-doublespace.docx #make sure this line is indented! see this guide for formatting: https://rmarkdown.rstudio.com/articles_docx.html
+      # reference_docx: word-styles-reference-singlespace.docx #make sure this line is indented! see this guide 
+      #pdf_document: 
+bibliography: seasonwatch_climate.bib
+suppress-bibliography: false
+csl: ecological-applications.csl
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Display items
+
+## Tables
+
+
+
+## Figures
+fig1_legend <- "Figure 1. "
+
+# https://github.com/EcoClimLab/Operations/blob/master/Data_Management-Scientific_Workflow/manuscript_prep_with_Rmd.md
+```
+```{r read files, echo=F, warning=F, message=F}
+library(performance)
+library(tidyverse)
+library(lubridate)
+# Read in files
+sw_spat <- readRDS("../data/modified_data/sw_spat.RDS")
+sw_first <- readRDS("../data/modified_data/start_nomiss.RDS")
+
+# read models
+# jack_bin_start <- readRDS("../models/onset_models/jack_full.RDS")
+# mango_bin_start <- readRDS("../models/onset_models/mango_full.RDS")
+# tam_bin_start <- readRDS("../models/onset_models/tam_full.RDS")
+
+
+jack_bin_start <- readRDS("../models/onset_models/jack_full_month_first.RDS")
+mango_bin_start <- readRDS("../models/onset_models/mango_full_month_first.RDS")
+tam_bin_start <- readRDS("../models/onset_models/tam_full_month_first.RDS")
+
+# loocv glmm results
+# jpreds <- read.csv("../models/onset_models/jack_loocv_preds.csv")
+# mpreds <- read.csv("../models/onset_models/mango_loocv_preds.csv")
+# tpreds <- read.csv("../models/onset_models/tam_loocv_preds.csv")
+
+jpreds <- read.csv("../models/onset_models/jack_first_loocv_preds.csv")
+mpreds <- read.csv("../models/onset_models/mango_first_loocv_preds.csv")
+tpreds <- read.csv("../models/onset_models/tam_first_loocv_preds.csv")
+
+# F1 scores------------------------
+
+f1 <- function(pred, obs) {
+  acc <- rep(NA, length(obs))
+  acc[which(pred == 1 & obs == 1)] <- "TP" # true positive
+  acc[which(pred == 0 & obs == 0)] <- "TN" # true negative
+  acc[which(pred == 0 & obs == 1)] <- "FN" # false negative
+  acc[which(pred == 1 & obs == 0)] <- "FP" # false positive
+
+  # F1 score is 2*(precision*recall)/(precision+recall)
+  # precision = TP/(TP+FP)
+  # recall = TP/ (TP+FN)
+
+  precision <- table(acc)[4] / (table(acc)[4] + table(acc)[2])
+  recall <- table(acc)[4] / (table(acc)[4] + table(acc)[1])
+
+  f1 <- 2 * (precision * recall) / (precision + recall)
+
+  return(f1)
+}
+
+
+f1_jack <- f1(pred = jpreds$pred.bin, obs = jpreds$fl_binary)
+f1_mango <- f1(pred = mpreds$pred.bin, obs = mpreds$fl_binary)
+f1_tam <- f1(pred = tpreds$pred.bin, obs = tpreds$fl_binary)
+
+jcor <- cor(jpreds$pred.bin, jpreds$fl_binary, use = "complete.obs")
+mcor <- cor(mpreds$pred.bin, mpreds$fl_binary, use = "complete.obs")
+tcor <- cor(tpreds$pred.bin, tpreds$fl_binary, use = "complete.obs")
+
+jmse <- mean((jpreds$fl_binary - jpreds$pred)^2, na.rm = T)
+mmse <- mean((mpreds$fl_binary - mpreds$pred)^2, na.rm = T)
+tmse <- mean((tpreds$fl_binary - tpreds$pred)^2, na.rm = T)
+
+# first onset only
+
+flon.df <- sw_first %>%
+  dplyr::mutate(
+    week = lubridate::week(Date),
+    week = ifelse(week == 53, 52, week)
+  ) %>%
+  # first change week to circular
+  dplyr::mutate(
+    week_deg = 360 * week / 52,
+    week_deg2 = ifelse(week_deg < 180, week_deg + 180, week_deg - 180),
+    year2 = ifelse(week_deg < 180, year - 1, year)
+  )
+
+flon.df0 <- flon.df %>%
+  filter(fl_binary == 0) %>%
+  dplyr::select(-week_deg, -week_deg2, -year2)
+
+flon.df1 <- flon.df %>%
+  filter(fl_binary == 1) %>%
+  dplyr::group_by(Species_name, User_Tree_id, year2) %>%
+  dplyr::slice(which.min(week_deg2)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-week_deg, -week_deg2, -year2)
+
+flon.df.all <- rbind(flon.df0, flon.df1)
+```
+
+***Title: Long-term citizen science data reveals climate influences of tropical tree flowering at the regional scale***
+
+***Authors:*** Krishna Anujan^1,2^*, Jacob Mardian^3^, Carina Luo^3^, Ramraj Rajakumar^3^, Hana Tasic^3^, Nadia Akseer^3^, Geetha Ramaswami^1^
+
+***Affiliations:***  
+^1^ SeasonWatch, Nature Conservation Foundation, 1311, “Amritha”, 12th Main, Vijayanagar 1st Stage, Mysore 570017, India  
+^2^ Department of Ecology, Evolution and Environmental Biology, Columbia University in the City of New York, 1110 Amsterdam Ave, New York, NY 10025, United States   
+^3^ Modern Scientist Global, 110 James Street, Suite 101, St. Catharines, Ontario L2R 7E8, Canada  
+* corresponding author. Email: krishna.anujan@gmail.com
+
+<!-- # Open Research Statement {-}
+Data are not yet provided. Environmental data used in this manuscript are from publicly available sources. All SeasonWatch data, the phenology data used in the manuscript, is licensed under the open-access creative commons license CC BY 4.0: https://creativecommons.org/licenses/by/4.0/ and is available upon request. Processed data and code used in this manuscript will be made publicly accessible through Zenodo upon acceptance of the manuscript. This manuscript does not use any novel code. -->
+<!-- \newpage -->
+
+<!-- # Abstract {-}
+Tropical tree reproductive phenology is sensitive to changing climate, but inter-individual and interannual variability at the regional scale is poorly understood.
+While large-scale and long-term datasets of environmental variables are available, reproductive phenology needs to be measured in-site, limiting the spatiotemporal scales of the data.
+We leveraged a unique dataset assembled by SeasonWatch, a citizen-science phenology monitoring programme in India to assess the environmental correlates of flowering in three ubiquitous and economically important tree species - jackfruit, mango and tamarind - in the south-western Indian state of Kerala.
+We explored the possibility of predicting (i) the flowering status of a tree at any given time, knowing recent environmental conditions, (ii) the environmental conditions that predict the onset of flowering and (iii) explored spatiotemporal patterns in these predictors to aid future hypotheses for changing phenology patterns.
+We used `r nrow(sw_spat)` phenology observations spread over `r length(unique(sw_spat$User_Tree_id))` individual trees over `r length(unique(sw_spat$year))` years, environmental predictors for the fortnight preceding each observation derived from remotely sensed observations (ERA5-LAND) to model the environmental correlates of flowering using two statistical approaches - machine learning and generalised linear mixed models.  -->
+<!---In these complementary approaches, we used a leave-one-year-out approach to cross-validate the model against observations.--->
+<!-- We found strong influences of temperature and rainfall variables on phenophase presence - soil moisture and minimum temperature had high importance values under machine learning models of presence/absence and had strong effects in the onset of flowering.
+The effect of time-varying environmental factors, minimum temperature, soil moisture and solar radiation, were also modified by static predictors like elevation, aspect, and urbanisation.
+Taken together, our results show the pervasive influence of climate on tropical tree reproductive phenology and its variability among years and individuals.
+Our results become increasingly important in the face of large heterogenous change in the climate of this landscape and other tropical regions.
+We demonstrate the potential and limitations of citizen-science observations in making and testing predictions at scale for predictive climate science in tropical landscapes.
+
+\newpage -->
+
+# Abstract {-}
+Tropical tree reproductive phenology is sensitive to changing climate, but inter-individual and interannual variability at the regional scale is poorly understood.
+While large-scale and long-term datasets of environmental variables are available, reproductive phenology needs to be measured in-site, limiting the spatiotemporal scales of the data.
+We leveraged a unique dataset assembled by SeasonWatch, a citizen-science phenology monitoring programme in India to assess the environmental correlates of flowering in three ubiquitous and economically important tree species - jackfruit, mango and tamarind - in the south-western Indian state of Kerala.
+We explored (i) seasonal patterns in the flowering status of trees (ii) environmental correlates of flowering onset considering only trees with consecutive observations and (iii) spatiotemporal patterns in these environmental correlates to aid future hypotheses for changing phenology patterns. 
+We used `r nrow(sw_spat)` phenology observations spread over `r length(unique(sw_spat$User_Tree_id))` individual trees over `r length(unique(sw_spat$year))` years. 
+We first used bootstrapped circular statistics that accounts for observation biases in time to examine consistency in seasonality of flowering status over the whole season, and flowering onset across years and trees. 
+Similar to results from cohort-based tree monitoring, we demonstrate seasonality in flowering status and onset across species, but also report large interannual and inter-individual variability. 
+We then used used generalized linear mixed models with remotely sensed observations (ERA5-LAND) to show that some of the interannual variation in flowering onset across individuals was associated with environmental variables.
+Soil moisture, minimum temperature and solar radiation had significant associations with the onset of flowering but these effects were heterogeneous across species and habitats across Kerala. 
+<!-- Taken together, our results show the pervasive influence of climate on tropical tree reproductive phenology and its variability among years and individuals. -->
+Our results become increasingly important in the face of large spatiotemporal change in the climate of this landscape and other tropical regions.
+We demonstrate the potential and limitations of citizen-science observations in making and testing predictions at scale for predictive climate science in tropical landscapes.
+
+\newpage
+
+
+# Introduction {-}
+
+Tree reproductive phenology is altered by a changing climate, affecting species interactions and ecosystem functions and services [@cleland_shifting_2007; @mora_suitable_2015]. 
+Flowering in trees is triggered by environmental cues like temperature, rainfall events, dry spells, and photoperiod [@chang-yang_enso_2016; @chapman_longterm_2005; @pau_longterm_2018; @capovilla_control_2015].
+These cues are directly or indirectly altered by changing climate, potentially affecting flowering phenology in trees.
+Changes in onset, duration, and quantity of reproductive phenophases can alter flower and fruit availabilty in the landscape, affecting interactions with other species like pollinators, frugivores, and seed dispersers [@caradonna_shifts_2014; @morellato_linking_2016; @visser_shifts_2005]. 
+Consequently, for wild populations of trees, changes in phenology can influence regeneration dynamics and population persistence. 
+Changing phenology can also have socio-cultural impacts, through altering food production and creating mismatches in cultural understanding of tree behaviours [@mora_suitable_2015; @morellato_linking_2016]. 
+While landscape-level phenological shifts in temperate regions have been studied over decades, large gaps remain in ecological documentation and predictions for shifts in the reproductive phenology of tropical trees [@davis_new_2022; @sullivan_cascading_2024]. 
+
+In tropical landscapes where trees grow and reproduce year-round, environmental cues for phenological change can be spatially and temporally diffuse [@satake_crossscale_2022; @abernethy_current_2018; @chen_speciesspecific_2018; @parmesan_influences_2007].
+<!-- Phenology of tropical and temperate trees respond to different sets of environmental factors  [@abernethy_current_2018; @pau_predicting_2011].  -->
+<!-- For example, in temperate landscapes, distinct growing seasons correspond to rapid phenological onset responses like spring “green-up” or synchronised flowering [@elmendorf_time_2019; @li_comparisons_2021]. -->
+There is a growing understanding of the influence of environmental factors on leaf phenology of tropical species[@chaturvedi_functional_2021; @devi_phenological_2023].
+However, with the exception of focused regions that are intensively monitored, [e.g. Pasoh, Malaysia in @chen_speciesspecific_2018; Barro Colorado Island, Panama in @wright_phenology_2019] information on tropical reproductive phenology is generally lacking. 
+Cohort monitoring of trees has shown that temperature, precipitation, and solar radiation (e.g. cold days, dry spells, total accumulated rainfall and soil moisture) affect the onset and duration of flowering phenology in tropical trees [@brearley_reproductive_2007; @diez_seasonal_2014; @pau_clouds_2013; @wright_solar_2018; @singh_phenology_1992]. 
+Interannual rainfall variability - high rainfall years and drought years including cycles like the El Niño Southern Oscillation and the Indian Ocean Dipole - can result in interannual variability in tree phenophase onset and intensity [@chang-yang_enso_2016; @chapman_solar_2018; @dunham_fruiting_2018; @medway_phenology_1972; @pau_longterm_2018; @zimmerman_flowering_2007; @vleminckx_flower_2024].
+Furthermore, climate change has resulted in altered rainfall and temperature regimes as well as extreme events in tropical environments, increasing inter-annual variability [@mora_projected_2013; @sullivan_cascading_2024]. 
+To predict future phenological shifts in the tropics, an important first step is to understand the extent of environmental controls on tropical tree reproductive phenology.  
+
+Environmental cues could affect phenology with a lag time, interact with habitat factors and affect individuals differently, necessitating large-scale and long-term data.
+<!-- An example of a long-term phenology dataset is from Japan where the flowering of cherry blossoms (*Prunus jamasakura*) has been documented since the 9th century creating strong baselines to assess contemporary change in flowering phenology with changing environmental cues [@allen_modeling_2014; @aono_phenological_2008]. -->
+In tropical species, at least six years of data is necessary to accurately detect phenological cycles in regularly flowering species, with much more for noisy species [@bush_fourier_2017].
+<!-- Reproductive phenology could also be affected by spatial factors that influence water availability - like elevation and the aspect of the slope - as well as the degree of urbanisation. -->
+Species across habitats may have different responses to the same environmental cues, with differences in timing due to urbanisation [@neil_effects_2006], variation in synchrony with latitude [@borchert_environmental_2004] or with distance to coast [@vanderplank_marine_2016]. 
+<!-- For instance, even within the same year (similar climatic cues), trees in North America, Europe and China have been found to flower earlier in cities than in surrounding non-urban habitats, likely due to urban heat island effects [@neil_effects_2006].  -->
+Tropical tree phenology also exhibits large variation among individuals, necessitating large spatial samples besides long-term data for a process-based understanding[@caradonna_shifts_2014; @li_comparisons_2021; @satake_forecasting_2013]. 
+A recent review of reproductive phenology studies from the Neotropics showed that across 218 datasets, the majority of datasets lasted 2 years or less, and only 10.4% monitored > 15 individuals per species [@mendoza_continentalscale_2017].
+Across the tropics, phenology of even ubiquitous species have rarely been recorded systematically, hindering the potential to make large-scale predictions of climate impacts of tree-associated ecosystem services [@mcdonoughmackenzie_low_2020; @piao_plant_2019]. 
+In the absence of robust datasets, potentially high intraspecific variation in reproductive phenology makes it difficult to parametrise models that span spatial scales of environmental change. 
+
+Citizen science allows access to longitudinal data across large spatial scales that is difficult to achieve through other sampling techniques.
+Citizen science data has led to novel understanding of phenological patterns in other taxa - observations of migratory bird populations across North America have been useful in documenting phenological shifts, spatial differences in sensitivities to changing climate, as well as disentangling drivers of change [@haas_correlation_2022; @hurlbert_spatiotemporal_2012; @kelly_novel_2016]. 
+Other efforts, like the USA National Phenology Network, have helped quantify continental-scale phenological patterns of plant species in North America and their climatic sensitivities [@schwartz_caprio_2012; @crimmins_science_2022; @gallinat_combined_2026].
+SeasonWatch, a citizen science phenology monitoring programme has been collecting data on several phenophases for common, widespread tree species across India since 2010 [@ramaswami_tracking_2019; @ramaswami_using_2021].
+Each week, observers record flowering, along with other phenophases, on specific trees consistently using a uniform protocol that records both presence and intensity of a phenophase (Fig 1a).
+This dataset, with substantial contributions since 2014, provides a unique opportunity to build baselines for phenology in the Indian subcontinent.
+In the past, some analyses of these data have revealed patterns of change in at least one species - *Cassia fistula* - over the time period of observation [@ramaswami_using_2021; @ramaswami_case_2018].
+These common species, spread across ecoregions and habitats, can add to phenological understanding at large scales, complementing focussed, localised studies.
+
+Here, we investigated the environmental influences of flowering in common tree species in India at the individual tree scale using SeasonWatch data. 
+We used `r nrow(sw_spat)` phenology observations across `r length(unique(sw_spat$User_Tree_id))` individual trees over `r length(unique(sw_spat$year))` years from tree species in the southwestern Indian state of Kerala, and correlated these with remotely-sensed environmental variables using generalised linear mixed model approaches.
+<!-- We asked (i) to what extent can recent environmental conditions predict the probability of observing flowering on a given tree at a given time? (ii) to what extent do recent environmental conditions and habitat factors predict the onset of flowering on individual trees? (iii) how are climatic correlates of phenology changing across the landscape assessed? -->
+We asked (i) what are the seasonal patterns in flowering of common trees across Kerala and what is the extent of interannual and interindividual variation? 
+<!-- (ii) to what extent is interannual variation in flowering phenology with species predictable by interindividual variation?  -->
+(ii) What are the environmental correlates associated with tree-level flowering onset?
+(iii) How are relevant environmental cues changing spatiotemporally across the landscape? 
+We focussed on flowering of three species with the greatest number of individuals and observations across Kerala - jackfruit (*Artocarpus heterophyllus*), mango (*Mangifera indica*) and tamarind (*Tamarindus indica*). 
+<!-- Jackfruit, mango, and tamarind are common trees, with fruits widely used in Indian cuisine and are commercially important fruit-bearing trees.  -->
+<!-- Flowering phenology of these species is thus vital for predicting fruit crop sizes which directly affects human livelihoods and well-being.   -->
+We expected (i) interannual and interindividual variation in flowering to varying degrees across the three species,
+(ii) based on research using cohort sampling of trees, we expected temperature and precipitation patterns to influence the onset of flowering. 
+(iii) However, given the large spatial extent of our dataset, we also expected that tree flowering responses to environmental correlates would vary with elevation, aspect, and degree of urbanisation. 
+<!-- (iii) environmental correlates of flowering to be species-specific.  -->
+<!-- (iv) Finally, through exploratory analysis, we expected to observe and quantify spatiotemporal variation in environmental correlates of flowering phenology in Kerala.   -->
+
+# Methods {-}
+
+## Study Area, Species and SeasonWatch Data {-}
+We analyzed phenology and environmental data from the south-western Indian coastal state of Kerala (8° 18’ N - 12° 48’ N and 74° 52’ E - 72° 22’ E). Kerala lies along the Arabian Sea with a tropical monsoon climate. 
+The state receives an average annual rainfall of over 3000mm via two major branches of the Indian monsoon system - the southwest (June-September) and northeast (October-December) monsoon. 
+The total population of the state is over 3 million, spread over an area of 38,863 km^2^. 
+Citizen scientists from the state have contributed substantially to phenology data; across all SeasonWatch data (SeasonWatch Citizen Scientist Network, 2022, @ramaswami_seasonwatch_2022), 263,288 observations across species and categories, and including 93.2% of observations of top three species are from Kerala. 
+These data span a large geographic range in the state, potentially capturing environmental variability in terms of rainfall, temperature, elevation. 
+<!-- This information density and spread, especially for repeat observations, makes it an ideal dataset to answer these questions.   -->
+
+### *Study species and observations* {-}
+
+We analyzed flowering phenology in three frequently observed species in the SeasonWatch dataset - *Artocarpus heterophyllus* (henceforth “jackfruit”), *Mangifera indica* (henceforth “mango”) and *Tamarindus indica* (henceforth “tamarind”) from January 2014 - July 2022. 
+All three tree species are grown across the state in orchards, homes, and also occur wild. 
+<!-- The fruits of all three species are commercially and culturally important.  -->
+As part of SeasonWatch, observers register one or more "regular" trees from a list of suggested species on a mobile phone application or web browser and record phenology on a weekly basis. 
+The project also allows for "casual" or one-time observations of trees (outside an observer's "regular" list), often during coordinated events, expanding the spatial coverage of the data. 
+In total, these three species had 165006 observations across 19596 trees with recorded or verifiable locations, distributed across the state of Kerala (Fig 1).
+All observations to SeasonWatch comprise estimates of quantity ("none", "few", "many") of leaf (young, mature, dry), flower (bud, open flower) and fruit (unripe, ripe) phenophases of a tree. 
+For each of the 7 phenophases, the standard protocol for reporting involves dividing the canopy of a tree into thirds, reporting as ‘none’ if it is not observed, as ‘few’ if a phenophase is observed only in 1/3rd of the canopy, and as ‘many’ if a phenophase is observed on more than 1/3rd of the canopy (Fig 1a).  
+
+### *SeasonWatch protocol and data quality* {-}
+
+SeasonWatch data is contributed by voluntary participants; the programme recruits citizen scientists by first identifying regional partner organisations, training the trainers in these organisations who then recruit and train participants (e.g. teachers, students and community members), thus amplifying the network reach. 
+<!-- Observers are children or adults, participating from diverse habitats such as school campuses, urban and rural residential areas, and forests.  -->
+<!-- As in other citizen science projects, there is likely to be inter-observer variability in reporting phenophases as well as bias towards observing familiar species with conspicuous flowers or fruits.  -->
+The project minimises inter-observer biases and errors in observation through workshops and training as well as one-on-one follow-up and troubleshooting. 
+Pertinently, the flowering phases of the common trees chosen for analysis are distinctly observable with the naked eye, and familiar to participants, lending confidence to community data. 
+The data distribution across species and years is provided in Table 1, Fig S1 and Fig S2.
+
+<!---SeasonWatch trains citizen scientists through annual workshops across 41 educational districts in Kerala where step-by-step guidance is provided on the observation process along with practical sessions where possible. 
+One-on-one follow-up, and troubleshooting is also provided to ensure consistency across observers over communication channels such as WhatsApp, email, and social media. ---->
+
+<!---Between 2012 and 2019, India has on average produced 1713000 Metric tonnes (MT) of jackfruit, 14551900 MT of mango and 201330 MT of tamarind (https://ceicdata.com).---> 
+<!---In Kerala households, all three species are cooking staples and mango and jackfruit also feature in culturally important festivals like Vishu, a harvest festival celebrated in mid-April.--->
+
+## Data cleaning and processing {-}
+
+We cleaned and processed SeasonWatch data for jackfruit, mango and tamarind from 2014-2022 to create two different data subsets - flowering status and flowering onset. 
+To maximise inclusion of data points, we included all "regular" and "causal" observations that we were able to reliably assign and validate locations, either as recorded on the web portal or by cross-verification (for details see Section S2). 
+We recoded the none/few/many observations of bud and flowers into presence/absence of flowering by coding an observation as "1" if it was recorded as "few" or "many" for buds or flowers, and "0" otherwise. 
+We chose to combine the bud and the flowering phenophases to minimise observation errors in these species where flowers are small and/or greenish and can be difficult to distinguish from buds, especially in taller canopies. 
+Our choice of binary variable also reduces potential user subjectivity in the categorising of “few” and “many”. 
+
+### *Flowering status* {-}
+Flowering status included all observations across trees and years in the dataset where presence or absence of flowering (bud or flower) was recorded. 
+We assembled a final flowering status dataset of 165006 observations across 19596 trees; 7927 trees of jackfruit, 9919 of mango and 1750 of tamarind across the state of Kerala (Fig 1, Table S1). 
+The number of observations varied by week and year, with numbers generally increasing in the later part of the study period because of increased participation in the programme. (Fig S1)
+Most trees in this dataset were observed few times, but several trees had long, uninterrupted flowering status timeseries for one or multiple years (Fig S4). 
+
+### *Flowering onset* {-}
+The onset of flowering is defined as the first week in a year when a tree switches in status from non-flowering to flowering. 
+<!-- To estimate true flowering onset at the tree level, we filtered the flowering status dataset to exclude all observations for which there was no flowering status observation in the preceding week, thus minimising observation bias.  -->
+To identify flowering onset accurately, we selected observation pairs within a one-week interval in which the earlier observation was 0 (no flowering), and excluded observations with either no observation in the previous week or if it was observed as already flowering.
+Since we were interested in the drivers of the switch from non-flowering to flowering, we further filtered this dataset to only include observations when the tree was observed to be non-flowering in the previous week. 
+For trees that were observed to have multiple onsets in a year (starting from June, the beginning of the wet season), we retained only the first onset observation. 
+This reduced the dataset to `r nrow(flon.df.all)` observations with an immediate predecessor, across `r length(unique(flon.df.all$User_Tree_id))` trees, out of which, `r sum(flon.df.all$fl_binary == 1)` were true onset observations (0, 1) and the remaining were status quo observations (0, 0) (Table 1, Fig S2). 
+By filtering to only observations with a non-flowering predecessor, the flowering onset dataset has minimal temporal autocorrelation among observations, allowing the application of mixed modelling frameworks.  
+
+## Environmental datasets {-}
+<!-- To generate a set of predictors for flowering, we summarised environmental datasets from various sources within the state boundary of Kerala.  -->
+We derived seven potential spatiotemporal predictors of flowering from remotely sensed data - three related to temperature (minimum, maximum and mean), three to precipitation (total precipitation, soil moisture and the number of consecutive dry days), and solar radiation.
+We used daily measurements of precipitation, temperature, solar radiation and soil moisture for the entire soil column from the ERA5-Land dataset at the 11.1 km spatial resolution and  
+summarised these to the fortnight (14 days) preceding each observation using Google Earth Engine (Table 2). 
+Monthly and quarterly summaries were highly correlated to the fortnightly value (Fig S3) and hence we used this finest temporal resolution (fortnight) for the analysis. 
+Along with spatiotemporal predictors, we calculated spatial factors - elevation, aspect and degree of urbanisation - at each tree location that might potentially act as modifiers for the temporal predictors (Table 2).
+We used a Digital Elevation Model created from the Shuttle Radio Topography Mission (SRTM)  at the 30 m resolution to calculate elevation, slope and aspect at the tree location.
+Further, we used the NASA nightlights layer from 2016 at the 500 m resolution as a proxy for the degree of urbanisation [@sutton_census_2001]. 
+We scaled the nightlights value across the range of observations in our dataset to provide a relative measure of urbanisation across the state.
+<!-- We chose this metric as the ambient light, one of the proxies for degree of urbanisation, also has a direct ecological relevance on the physiology of plant life. -->
+<!----We validated this choice by also running models with monthly predictors. ---->
+
+## Data analysis {-}
+
+We analysed seasonality in flowering status and flowering onset at the population level using circular statistics and then modelled predictors of individual-level flowering onset across years of observations using generalised linear mixed models. 
+We modelled flowering seasonality and the ecological predictors of flowering onset separately for each of the three species, as these species are physiologically and phylogenetically distinct (belonging to families - Moraceae, Anacardiaceae, and Fabaceae) and may therefore show distinct flowering seasonality and heterogeneous responses to the same environmental cues. 
+Finally we examined spatiotemporal patterns in environmental predictors across Kerala using hotspot analyses. 
+Analyses were performed using R version 4.1.3 and ArcGIS Pro version 3.0.2 [@rcoreteam_language_2022].
+
+<!----We used two distinct modelling techniques because 1) modelling techniques have their own assumptions and biases that can be partially overcome using multiple lines of evidence and 2) interpreting variable importance in machine learning models is subject to equifinality - the potential for arriving at the same prediction results through completely different approaches.---->
+
+<!-- ## Machine Learning models to model the probability of flowering at any given time {-}
+
+For the entire set of observations, we used Random Forest models to classify the flowering occurrence observations based on environmental predictors.
+Random Forest classifier is a supervised learning algorithm that uses an ensemble of decision trees using majority voting to classify datasets into two categories; here the presence/absence of flowering [@breiman_random_2001]. 
+Random Forest classifiers have been used widely in ecological data analysis because of their flexibility and accuracy [@cutler_random_2007]. This approach allows for predicting the probability of observing flowering in a tree given recent environmental conditions.--->
+<!------CatBoost is a machine learning algorithm to classify categorical data that uses gradient boosting on decision trees and is available as an open source library (Dorogush et al., 2018; Prokhorenkova et al., 2017) .------>
+<!---For each of the three species, we ran separate models to classify flowering status according to the following model:
+
+$$
+phenophase_{l,t} \sim precipitation_{l,t} + maximum temperature_{l,t} + minimum temperature_{l,t} + mean temperature_{l,t} + dry days_{l,t} + soil moisture_{l,t} +solar radiation_{l,t}
+$$
+
+Where precipitation, temperature, dry days, soil moisture, solar radiation are temporal predictors for the fortnight before the observation at location $l$ and time $t$.
+We ran these models in R using the package *randomForest* [@liaw_classification_2002] for 500 decision trees. 
+Tree-based methods are fairly insensitive to collinearity among predictors, allowing us to compare the full-range of temperature and precipitation variables simultaneously, as well as the full dataset, including repeat observations for the same tree. 
+We calculated variable importance for each model using the Mean Decrease in Accuracy (MDA) metric which removes a predictor from the model, re-trains the model to make predictions, and evaluates the decrease in accuracy. -->
+
+### Circular statistics to estimate population flowering seasonality and onset seasonality {-}
+
+We used a newly developed bootstrap method to assess seasonality in flowering in the three species across the state of Kerala [@willig_phenological_2024]. 
+Seasonality in flowering is best described using circular statistics like circular mean and the Rayleigh statistic which describe the clustering of the data in circular axes (here, week of year) [@morellato_applications_2010]. 
+Unlike long-term field monitoring datasets which have fixed cohorts that are repeatedly monitored during the entire monitoring period, citizen science datasets like SeasonWatch can have a) different start and end dates for different individuals b) different timeseries lengths and c) larger proportion of missingness, despite greater spatial spread. 
+This unique data structure leads to non-uniform data distribution across the temporal extent and makes this analogous to capture sampling of random individuals in a population at a fixed frequency, violating the uniformity assumptions of traditional circular statistics [@willig_phenological_2024].   
+
+Using a bootstrapping method, we calculated the circular mean of flowering status and flowering onset for each year of study. 
+Since flowering occurs between November and April for these species in Kerala, we rotated the year to start from the first week of July, when the flowering observations were lowest. 
+This left us with 8 full years of data from July 2014 to July 2022. 
+We sampled observations with replacement for each week of study to a constant N, equal to the average weekly observation for that species, making the sample distribution uniform across the year. 
+With this uniform sample, we calculated circular mean, Rayleigh statistic (a measure of temporal clustering) and the p-value of the statistic. 
+We repeated the sampling for 1000 iterations and calculated the bootstrap mean and deviation. 
+To examine interannual consistency in flowering onset across individuals, we calculated mean week of flowering onset and standard deviation for each tree across years all years of onset observations.  
+
+### Generalised linear mixed models for flowering onset at the individual level {-}
+
+We examined the effects of environmental variables on the onset of flowering in the three species using generalised linear mixed effects models for interactions between variables and variable collinearity. 
+<!-- We then modelled the probability of observing flowering at time $t$ as a function of environmental variables in the preceding fortnight. -->
+For each of the three species modelled, the time-varying predictors were identified by picking the most influential variables from random forest (machine learning) models using all environmental variables as predictors (Supplementary Section S4). 
+For each species, we picked most important variable in the temperature group (among minimum, maximum and mean), the most important variable in the precipitation group (among total precipitation, number of dry days and soil moisture), and solar radiation. 
+For all species, the most influential temperature variable was minimum temperature and precipitation variable was soil moisture. 
+This grouping allowed us to test the effects of temperature, precipitation and solar radiation, while avoiding including highly correlated variables that can violate mixed modelling assumptions.  
+We accounted for interactions between time-varying and static predictors, excluding known, correlated variable combinations. 
+Specifically, we excluded interactions between elevation and minimum temperature, aspect and precipitation (the Western Ghats range in Kerala affects rainfall patterns), degree of urbanisation and minimum temperature (known heat island effects in urban areas), degree of urbanisation and soil moisture (potentially associated with heat island effects). 
+Further, to account for data structure in space and time, we included random effects of tree and the spatial grid in which it was located.
+<!------Two separate modelling approaches were used here. We modelled the phenophase intensity (none/few/many; ordinal) using cumulative link mixed models, that allows predictions of ordinal variables from fixed and random effects (Agresti, 2002; Greene & Hensher, 2010).
+We modelled these using the package ordinal, and function clmm2 (Christensen, 2019).
+These are proportional-odds models that statistically account for issues of pseudoreplication associated with the repeat censuses and the mixed model approach allows random effects at the tree level (Agresti, 2002; Christensen, n.d.).
+Moreover, beyond a standard proportional hazards or Cox survival model, the assumptions of this model allow all possibilities of transitions between the three states - none, few and many - instead of a step-wise transitions, which applies to these seasonal trees that may transition quickly through phenophases.------>
+
+<!-- To account for the modification of the influence of environmental variables based on habitat, we also modelled interactions with elevation, aspect and degree of urbanisation - three habitat variables that have a range of variation in Kerala.  -->
+<!-- Although it is possible that each of these variables could potentially interact with the temporal variables, some of these are known to be correlated with each other (e.g. elevation and temperature).  -->
+<!-- Since our study design did not explicitly account for these correlations, we chose to model only interactions that did not have known, high ecological correlation. -->
+
+
+$$
+phenophase_{l,t} \sim minimum.temperature_{l,t} + soil. moisture_{l,t} + solar.radiation_{l,t}+
+ elevation_{l}∗soil.moisture_{l,t} + elevation_{l}∗solar.radiation_{l,t} +
+ aspect_{l}∗minimum.temperature_{l,t} + aspect_{l}∗soil moisture_{l,t} + 
+ +urbanisation_{l}∗solar.radiation_{l,t} +
+(1|Grid ID)
+$$
+
+Where minimum temperature, soil moisture and solar radiation are measured at the location $l$ for the fortnight before the observation $t$, elevation, aspect and urbanisation are spatial predictors tied to the tree location $l$.
+The model includes two random effects on the intercept; $Tree ID$ to account for repeated measures on the same tree and $Grid ID$ to account for spatial autocorrelation.
+
+We modelled the onset of the phenophase using a generalized linear mixed model with a binomial family of errors using the *package* lme4 [@bates_fitting_2015]. 
+For all models, we mean-centred all predictor variables at 0 and scaled it to a distribution with standard deviation 1 for ease of comparing the effect sizes.
+We tested the fit of these models using conditional and marginal R^2^ using packages *performance* and *sjPlot* [@lüdecke_performance_2021; @lüdecke_sjplot_2023]. 
+We used a cross-validation technique, leave-one-out cross-validation (LOOCV), to test the predictive power of our model for "out-of-bag" observations. 
+In this method, we ran each model 9 times, systematically leaving one year of observations out each time. 
+We then used the model coefficients to predict these “new” observations and tested their accuracy using Pearson's correlation coefficient between predicted and observed values, and then tested for reliability of predicted values using F1 scores. 
+F1 scores are good indicators of the distribution of true and false positives and negatives by taking the harmonic mean of precision and recall [@grandini_metrics_2020; @hossin_review_2015]. 
+<!-- Specifically, we calculated F1 scores as:
+
+$$
+F1 = 2*(Precision + Recall)
+$$
+where
+$$
+Precision = \dfrac{TP}{TP+FP}
+$$
+and $$Recall = \dfrac{TP}{TP+FN}$$
+
+where $TP$ is the number of true positives, $FP$ is the number of false positives and $FN$ is the number of false negatives for “out-of-bag” predictions. -->
+<!-- For GLMMS, in addition to F1 scores, we also calculated mean square error (MSE) of the observations and Pearson’s correlation coefficient between predicted and observed values. -->
+
+
+
+<!-----We also ran additional models to test the influence of location on phenophase by including latitude, longitude and month of observation as predictors along with the environmental correlates mentioned, as described below. --->
+<!--------
+phenophasel,t ~ precipitationl,t + temperaturel,t + dry daysl,t +soil moisturel,t + 
+latitudel+ longitudel + month+
+elevationl∗precipitationl,t + aspectl∗soil moisturel,t + urbanisationl∗dry daysl,t +
+(1|Tree ID) 
+------->
+<!-- ## Model validation {-}
+
+With large datasets and many predictors, models can be overfit to the modelled data but unable to predict “new” observations. -->
+<!-- Traditional model diagnostics, like R^2^ or likelihood, report the “fit” or amount of variance in the dataset used for modelling explained by the model, but not for “out-of-bag” data that has not been encountered by the model.  -->
+
+
+<!-- ### Hotspot analysis {-}
+
+We analysed spatiotemporal patterns of environmental variables that affect flowering onset in Kerala, with an intention to identify directional changes or spatial shifts. 
+Hotspot analysis allows the identification of such spatiotemporal patterns using the entire timeseries of environmental data across the years measured. 
+A hot spot/cold spot is defined as a location which has high (or low) value for an environmental variable, like temperature, precipitation or soil moisture, and is surrounded by other areas with similar values; a spatial cluster. 
+Using fortnightly aggregated environmental variables from 2014-2022, we ran emerging hotspot analysis in ArcGIS Pro for minimum temperature, mean soil moisture and total solar radiation, the three variables used for the GLMM analysis, across Kerala. 
+We used a combination of two statistical measures 1) the Getis-Ord Gi* statistic to identify hot spots and cold spots of climate measurements for each time step (i.e., fortnightly), and 2) the Mann Kendall trend test to examine how hot spots and cold spots have evolved over time [@getis_analysis_1992; @sen_estimates_1968; @kendall1987advanced; @mann_nonparametric_1945]. 
+For further details on methods, refer Appendix S1: Section S7.   -->
+
+# Results {-}
+
+```{r circular stuff, echo=FALSE, message=FALSE, warning=FALSE}
+fl_allyr <- read.csv("../models/circular/rayleigh_test_results_allyr.csv")
+flon_allyr <- read.csv("../models/circular/rayleigh_test_results_onset_allyrs.csv")
+
+fl_allyr$meanweek <- (fl_allyr$circmean - 180) * (52 / 360)
+flon_allyr$meanweek <- (flon_allyr$circmean - 180) * (52 / 360)
+
+# read the yearly stats
+fl_stats <- read.csv("../models/circular/rayleigh_test_results.csv")
+flon_stats <- read.csv("../models/circular/rayleigh_test_results_onset.csv")
+fl_stats$meanweek <- (fl_stats$circmean - 180) * (52 / 360)
+flon_stats$meanweek <- (flon_stats$circmean - 180) * (52 / 360)
+
+# arrnage these by mean week
+fl_stats <- fl_stats %>%
+  filter(year != 2013) %>%
+  group_by(Species_name) %>%
+  arrange(meanweek)
+
+flon_stats <- flon_stats %>%
+  filter(year != 2013) %>%
+  group_by(Species_name) %>%
+  arrange(meanweek)
+
+tree_flon <- read.csv("../models/circular/tree_flowering_onset.csv")
+
+tree_flon$meanweek <- (tree_flon$flon_week - 180) * (52 / 360)
+tree_flon$sd <- (tree_flon$flon_week_sd) * (52 / 360)
+
+Mode <- function(x) {
+  a <- table(as.integer(x))
+  as.numeric(names(a)[a == max(a)])
+}
+```
+
+## Seasonality in flowering across Kerala {-}
+
+Jackfruit, mango and tamarind trees exhibit differing patterns of flowering seasonality and substantial variation among years in mean flowering and flowering onset in the state of Kerala. 
+Across 9 years of data (2014 to 2022), bootstrapped circular mean of flowering status showed that mean flowering week was week `r round(fl_allyr$meanweek[1],1)` for jackfruit, `r round(fl_allyr$meanweek[2],1)` mango and `r round(fl_allyr$meanweek[3],1)` for tamarind. 
+Temporal clustering in flowering across all years was low, but jackfruit and mango showed higher clustering in flowering across the population than tamarind; bootstrapped Rayleigh statistic, *z* = `r round(fl_allyr$z_rayleigh[1],2)` (95% CI = `r round(fl_allyr$z2.5[1], 2)`, `r round(fl_allyr$z97.5[1],2)`) for jackfruit, `r round(fl_allyr$z_rayleigh[2],2)` (95% CI = `r round(fl_allyr$z2.5[2], 2)`, `r round(fl_allyr$z97.5[2],2)`) for mango and `r round(fl_allyr$z_rayleigh[3],2)`(95% CI = `r round(fl_allyr$z2.5[3], 2)`, `r round(fl_allyr$z97.5[3],2)`) for tamarind. 
+Correspondingly, mean week of flowering onset was week `r round(flon_allyr$meanweek[1],2)` for jackfruit, `r round(flon_allyr$meanweek[2],2)` for mango and `r round(flon_allyr$meanweek[3],2)` for tamarind. 
+Patterns of temporal clustering in flowering onset mirrored flowering status; Rayleigh statistic, *z* = `r round(flon_allyr$z_rayleigh[1],2)` (95% CI = `r round(flon_allyr$z2.5[1], 2)`, `r round(flon_allyr$z97.5[1],2)`) for jackfruit, `r round(flon_allyr$z_rayleigh[2],2)` (95% CI = `r round(flon_allyr$z2.5[2], 2)`, `r round(flon_allyr$z97.5[2],2)`) for mango and `r round(flon_allyr$z_rayleigh[3],2)` (95% CI = `r round(flon_allyr$z2.5[3], 2)`, `r round(flon_allyr$z97.5[3],2)`) for tamarind. 
+Across all three species, trees were observed to be flowering at all times of the year; no week had a zero proportion of trees flowering (Fig 1).  
+
+Across 8 full years of observations (excluding the first half of 2014), mean week of flowering status and flowering onset showed interannual variation, but there was low variation in temporal clustering of flowering (Fig 2). 
+Mean flowering week ranged from week `r round(fl_stats$meanweek[fl_stats$Species_name=="Artocarpus heterophyllus"][1],2)` in `r fl_stats$year[fl_stats$Species_name=="Artocarpus heterophyllus"][1]+1` to `r round(fl_stats$meanweek[fl_stats$Species_name=="Artocarpus heterophyllus"][8],2)` in `r fl_stats$year[fl_stats$Species_name=="Artocarpus heterophyllus"][8]+1` for jackfruit, `r round(fl_stats$meanweek[fl_stats$Species_name=="Mangifera indica"][1],2)` in `r fl_stats$year[fl_stats$Species_name=="Mangifera indica"][1]+1` to `r round(fl_stats$meanweek[fl_stats$Species_name=="Mangifera indica"][8],2)` in `r fl_stats$year[fl_stats$Species_name=="Mangifera indica"][8]+1` for mango and `r round(fl_stats$meanweek[fl_stats$Species_name=="Tamarindus indica"][1],2)` in `r fl_stats$year[fl_stats$Species_name=="Tamarindus indica"][1]+1` to `r round(fl_stats$meanweek[fl_stats$Species_name=="Tamarindus indica"][8],2)` in `r fl_stats$year[fl_stats$Species_name=="Tamarindus indica"][8]+1` for tamarind (Fig 2a). 
+Clustering in flowering status was relatively similar across the years (Fig 2a). For jackfruit, bootstrapped Rayleigh statistic of flowering status ranged from *z* = `r round(fl_stats$z_rayleigh[fl_stats$Species_name=="Artocarpus heterophyllus"][1],2)` (95% CI = `r round(fl_stats$z2.5[fl_stats$Species_name=="Artocarpus heterophyllus"][1], 2)`, `r round(fl_stats$z97.5[fl_stats$Species_name=="Artocarpus heterophyllus"][1],2)`) in `r fl_stats$year[fl_stats$Species_name=="Artocarpus heterophyllus"][1]+1` to *z* = `r round(fl_stats$z_rayleigh[fl_stats$Species_name=="Artocarpus heterophyllus"][8],2)` (95% CI = `r round(fl_stats$z2.5[fl_stats$Species_name=="Artocarpus heterophyllus"][8], 2)`, `r round(fl_stats$z97.5[fl_stats$Species_name=="Artocarpus heterophyllus"][8],2)`) in `r fl_stats$year[fl_stats$Species_name=="Artocarpus heterophyllus"][8]+1`. 
+Values for mango ranged from *z* = `r round(fl_stats$z_rayleigh[fl_stats$Species_name=="Mangifera indica"][1],2)` (95% CI = `r round(fl_stats$z2.5[fl_stats$Species_name=="Mangifera indica"][1], 2)`, `r round(fl_stats$z97.5[fl_stats$Species_name=="Mangifera indica"][1],2)`) in `r fl_stats$year[fl_stats$Species_name=="Mangifera indica"][1]+1` to *z* = `r round(fl_stats$z_rayleigh[fl_stats$Species_name=="Mangifera indica"][8],2)` (95% CI = `r round(fl_stats$z2.5[fl_stats$Species_name=="Mangifera indica"][8], 2)`, `r round(fl_stats$z97.5[fl_stats$Species_name=="Mangifera indica"][8],2)`) in `r fl_stats$year[fl_stats$Species_name=="Mangifera indica"][8]+1`. 
+Values for tamarind ranged from *z* = `r round(fl_stats$z_rayleigh[fl_stats$Species_name=="Tamarindus indica"][1],2)` (95% CI = `r round(fl_stats$z2.5[fl_stats$Species_name=="Tamarindus indica"][1], 2)`, `r round(fl_stats$z97.5[fl_stats$Species_name=="Tamarindus indica"][1],2)`) in `r fl_stats$year[fl_stats$Species_name=="Tamarindus indica"][1]+1` to *z* = `r round(fl_stats$z_rayleigh[fl_stats$Species_name=="Tamarindus indica"][8],2)` (95% CI = `r round(fl_stats$z2.5[fl_stats$Species_name=="Tamarindus indica"][8], 2)`, `r round(fl_stats$z97.5[fl_stats$Species_name=="Tamarindus indica"][8],2)`) in `r fl_stats$year[fl_stats$Species_name=="Tamarindus indica"][8]+1`. 
+Flowering onset typically occurred 4-6 weeks before mean flowering week and showed more clustering within species than flowering status (Fig 2). 
+Mean flowering onset across the years ranged from week `r round(flon_stats$meanweek[flon_stats$Species_name=="Artocarpus heterophyllus"][1],2)` in `r flon_stats$year[flon_stats$Species_name == "Artocarpus heterophyllus"][1]+1` to `r round(flon_stats$meanweek[flon_stats$Species_name=="Artocarpus heterophyllus"][8],2)` in `r flon_stats$year[flon_stats$Species_name == "Artocarpus heterophyllus"][8]+1` in jackfruit, `r round(flon_stats$meanweek[flon_stats$Species_name=="Mangifera indica"][1],2)` in `r flon_stats$year[flon_stats$Species_name == "Mangifera indica"][1]+1` to `r round(flon_stats$meanweek[flon_stats$Species_name=="Mangifera indica"][8],2)` in `r flon_stats$year[flon_stats$Species_name == "Mangifera indica"][8]+1` in mango, `r round(flon_stats$meanweek[flon_stats$Species_name=="Tamarindus indica"][1],2)` in `r flon_stats$year[flon_stats$Species_name == "Tamarindus indica"][1]+1` to `r round(flon_stats$meanweek[flon_stats$Species_name=="Tamarindus indica"][8],2)` in `r flon_stats$year[flon_stats$Species_name == "Tamarindus indica"][8]+1` in tamarind (Fig 2b). 
+Temporal clustering in flowering onset was less variable across the years; with tamarind having lower onset clustering than jackfruit and mango, during most years. 
+Clustering within species ranged had a smaller range, lowest clustering in jackfruit was observed in `r flon_stats$year[flon_stats$Species_name=="Artocarpus heterophyllus"][1]+1` with *z* = `r round(flon_stats$z_rayleigh[flon_stats$Species_name=="Artocarpus heterophyllus"][1],2)` (95% CI = `r round(flon_stats$z2.5[flon_stats$Species_name=="Artocarpus heterophyllus"][1], 2)`, `r round(fl_stats$z97.5[flon_stats$Species_name=="Artocarpus heterophyllus"][1],2)`) and highest in `r flon_stats$year[flon_stats$Species_name=="Artocarpus heterophyllus"][8]+1` with *z* = `r round(flon_stats$z_rayleigh[flon_stats$Species_name=="Artocarpus heterophyllus"][8],2)` (95% CI = `r round(flon_stats$z2.5[flon_stats$Species_name=="Artocarpus heterophyllus"][8], 2)`, `r round(fl_stats$z97.5[flon_stats$Species_name=="Artocarpus heterophyllus"][8],2)`) (Fig 2b). For mango, lowest and highest clustering of onset was observed in `r flon_stats$year[flon_stats$Species_name=="Mangifera indica"][1]+1` with *z* = `r round(flon_stats$z_rayleigh[flon_stats$Species_name=="Mangifera indica"][1],2)` (95% CI = `r round(flon_stats$z2.5[flon_stats$Species_name=="Mangifera indica"][1], 2)`, `r round(fl_stats$z97.5[flon_stats$Species_name=="Mangifera indica"][1],2)`) and `r flon_stats$year[flon_stats$Species_name=="Mangifera indica"][8]+1` with *z* = `r round(flon_stats$z_rayleigh[flon_stats$Species_name=="Mangifera indica"][8],2)` (95% CI = `r round(fl_stats$z2.5[flon_stats$Species_name=="Mangifera indica"][8], 2)`, `r round(fl_stats$z97.5[flon_stats$Species_name=="Mangifera indica"][8],2)`) respectively (Fig 2b). 
+For tamarind, lowest clustering was observed in `r flon_stats$year[flon_stats$Species_name=="Tamarindus indica"][1]+1` with *z* = `r round(flon_stats$z_rayleigh[flon_stats$Species_name=="Tamarindus indica"][1],2)` (95% CI = `r round(fl_stats$z2.5[flon_stats$Species_name=="Tamarindus indica"][1], 2)`, `r round(fl_stats$z97.5[flon_stats$Species_name=="Tamarindus indica"][1],2)`) and highest in `r flon_stats$year[flon_stats$Species_name=="Tamarindus indica"][8]+1` with *z* = `r round(flon_stats$z_rayleigh[flon_stats$Species_name=="Tamarindus indica"][8],2)` (95% CI = `r round(fl_stats$z2.5[flon_stats$Species_name=="Tamarindus indica"][8], 2)`, `r round(fl_stats$z97.5[flon_stats$Species_name=="Tamarindus indica"][8],2)`) (Fig 2b). 
+There were no observable directional trends with time in timing or clustering of flowering. 
+
+Individual trees across all three species exhibited large variation in mean flowering onset week across the years as well as low consistency in the date of onset (Fig 3). 
+Across all trees with observed true onset across the years, mean flowering onset week was distributed widely across the year for all three species (Fig 3a). 
+Most trees of jackfruit showed a mean flowering onset week in the calendar year of `r Mode(tree_flon$meanweek[tree_flon$Species_name=="Artocarpus heterophyllus"])`, mango in week `r Mode(tree_flon$meanweek[tree_flon$Species_name=="Mangifera indica"])` and tamarind in week `r Mode(tree_flon$meanweek[tree_flon$Species_name=="Tamarindus indica"])` (Fig 3a). 
+However, trees showed large variation in onset week across years (Fig 3b). 
+For trees with at least three years of onset observations, median standard deviation of flowering onset week was `r round(median(tree_flon$sd[tree_flon$spname=="jackfruit" & tree_flon$n.fl>=3], na.rm=T),2)` for jackfruit, `r round(median(tree_flon$sd[tree_flon$spname=="mango" & tree_flon$n.fl>=3], na.rm=T),2)` for mango and `r round(median(tree_flon$sd[tree_flon$spname=="tamarind" & tree_flon$n.fl>=3], na.rm=T),2)` for tamarind. 
+
+## Proximate environmental cues for flowering onset on a tree {-}
+
+Flowering onset at the tree level across Kerala was predicted by minimum temperature, soil moisture and solar radiation but in varying magnitudes and directions across species (Fig 4).
+For jackfruit and mango, flowering onset was associated with lower minimum temperature and drier soils while for tamarind with higher minimum temperatures and wetter soils (Fig 4).
+Solar radiation had a weak positive effect on the probability of flowering in mango (Fig 4). 
+GLMMs models of flowering onset had substantially better fits for jackfruit and mango than tamarind; the conditional R^2^ for the models, a metric of model fit including random effects, for jackfruit, mango and tamarind were 0.228, 0.242 and 0.131. 
+Marginal R^2^, that only includes predictions using fixed effects, was 0.079, 0.102 and 0.026 for jackfruit, mango and tamarind, suggesting poor predictability from environmental variables alone, especially for tamarind. 
+This suggests that fixed effects of environmental variation alone explained only a small proportion of the variation across flowering onset observations.  
+The ICC of the models were `r round(performance(jack_bin_start)$ICC,3)`, `r round(performance(mango_bin_start)$ICC, 3)` and `r round(performance(tam_bin_start)$ICC,3)` suggesting that random effects were not very clustered. 
+To assess the predictive power of the model for out-of-bag data, we assessed the agreement between the predicted and observed values from the onset model for one year of the data that was withheld from modelling across 9 LOOCV runs.
+Coefficient across these runs were similar in magnitude and direction (Supplementary Section S6).
+Pearson's correlation coefficients for predicted vs observed for jackfruit and mango across these runs `r round(jcor,3)`, `r round(mcor,3)`.
+The average mean square errors, respectively were `r round(jmse,3)`, `r round(mmse,3)`.
+F1 scores were `r round(f1_jack,3)`, `r round(f1_mango,3)`. 
+The model was unable to predict flowering onset in tamarind with all predictions tending to non-flowering.  
+
+Elevation and degree of urbnaisation modified the influence of environmental factors on the onset of flowering in jackfruit and mango trees (Fig 4). 
+Drier soils were associated with higher probability of flowering onset in mango, but this effect was stronger in lower elevations. 
+In parallel, solar radiation increased the probability of flowering onset in mango trees, but this effect was dampened in more urbanised areas (Fig 4). 
+In jackfruit trees, the influence of solar radiation as a cue for flowering onset was greater in lower elevation and more urban areas (Fig 4). 
+However, main effects of solar radiation were not significant at the 90% confidence level, making interpretations of these interactions difficult. 
+No interactions were significant for onset of flowering in tamarind trees. 
+However, the model was a poor fit, and therefore, the possibility of significant interactions with more data cannot be ruled out. 
+
+<!-- ## Spatiotemporal patterns in environmental variables {-}
+
+Locations across Kerala are experiencing heterogenous change in climatic conditions. 
+Emerging hotspot analysis revealed spatiotemporal patterns in the three variables assessed, minimum temperature, soil moisture and solar radiation, in the time period when SeasonWatch data was collected (Fig 5).
+Aggregated across the state, these environmental variables did not show significant overall directional trend of change, defined as new or intensifying hotspot/coldspot, at the spatial scale assessed, from 2014-2022.
+Along the west to east elevational gradient in Kerala, minimum temperature had persistent hotspots in coastal locations, while inland sites towards the east were persistent cold spots, potentially due to higher elevation (Fig 5).
+Emerging hotspot analysis for soil moisture revealed a persistent hotspot in the south centre of the state.
+This hotspot corresponds to the eastern parts of the districts of Ernakulam and Kottayam, and the western parts of Idukki.
+For minimum temperature and soil moisture, pixels around the persistent hotspots, show varying and heterogenous trends in hotspots or coldspots. 
+Mid-elevation sites in Kerala between the persistent coldspot and hotspot for minimum temperature have been classified as oscillating, sporadic or historical hot/coldspots, suggesting heterogenous change. 
+Similarly for soil moisture, areas around the persistent hotspot show sporadic or oscillating hotspots.
+No directional patterns were discernible for solar radiation. -->
+
+# Discussion {-}
+Altered temperature and precipitation patterns are expected to affect phenological responses of tropical tree species, but their variability across large spatial scales is rarely quantified and poorly understood.
+We used a unique citizen science dataset from the southwestern state of Kerala in India (Fig 1), unparalleled in scale for the tropics, to examine seasonality in flowering in common tropical tree species and the extent and correlates of interannual and interindividual variability. 
+<!-- Combining a unique citizen science dataset from India, unparalleled in scale for tropical trees, with remotely sensed environmental variables, we show that flowering status and onset in three common tropical species is influenced by environmental variables in the preceding fortnight. -->
+Our results show that over 9 years of weekly observations, timing of flowering status and flowering onset across three species shows 4-6 weeks of variation across years at the population level (Fig 2). 
+This interannual variation in the timing of flowering was not mirrored in temporal clustering flowering observed at the population level, which remained relatively constant, but was reflected in individual trees that showed substantial interannual variation in timing of flowering onset(Fig 3). 
+We show that some of this individual-level variation in phenology of flowering onset across the years is associated with recent (fortnightly), local climatic conditions, such as soil moisture and minimum temperature, the effects of which can be different along elevation and urbanisation gradients (Fig 4). 
+These environmental cues associated with phenology of these common trees, however, are changing across Kerala, with potential consequences for phenology and associated ecosystem services. 
+Our results show the potential of citizen science datasets to provide crucial insights at spatial and temporal scales relevant for adaptive ecosystem management.  
+<!-- For widespread species, existing phenological information tends to be localised, making it difficult to measure variability across individuals and sites to make population-level predictions at the regional scale.  -->
+
+Our use of citizen science data and associated temporal data gaps limits the use of some common methods like Fourier transformation to disentangle seasonal patterns from long-term drivers at the individual tree level. 
+Cohort-based long-term monitoring of tree populations has led to important understanding of the influence of seasonal precipitation and interannual variability through ENSO events, droughts etc. on reproductive phenology of trees in tropical sites [@wright_nino_1999; @sakai_tropical_2019; @harrison_repercussions_2000; @vleminckx_flower_2024]. 
+Given the lack in uninterrupted timeseries at the individual tree level, we were unable to disentangle individual variation in phenology from temporal patterns for long timescale. 
+However, our study spans nine years of observations, more than the minimum recommended six years to identify flowering cycles in regularly flowering tropical species [@bush_effective_2018], and the spatial extent of the dataset is much larger compared to the limitations of long-term cohort monitoring (often restricted to a site) allowing us to extend inferences to large spatial scales. 
+However, given that spatial variability adds noise to the dataset, long-term data collection is crucial to reliably estimate flowering cycles and their climatic influences.
+Examining flowering observations across a wide variation in habitats also revealed that trees in high elevation or urban areas respond differently to environmental cues, adding to prevalent understanding of the contextual nature of flowering cues [@kabano_sensitivity_2020; @neil_effects_2006; @babweteera_ecology_2018]. 
+Such accumulating broad-scale datasets led by citizen scientists could be important complements to finer scale long-term expert-led monitoring to understand shifting phenological baselines across species ranges [@gallinat_combined_2026]. 
+Further, integrating these with molecular approaches [@satake_crossscale_2022], herbarium-based approaches [@park_herbarium_2023] can provide a more mechanistic understanding of the climatic cues for flowering and their long-term variability.  
+
+Extending our results across tropical trees and landscapes poses certain limitations because of some broad ecological and functional similarities in the three species studied. 
+All three species studied were dioecious, evergreen, widespread, insect-pollinated, bear fleshy fruits, and cultivated in home gardens (Table S1). 
+Notably, jackfruit trees in the dataset showed high tendencies for multiple instances of flowering onset within a year, and tamarind showed low seasonality in flowering overall (Fig 2). 
+Mixed models of flowering onset showed that environmental predictors explained only ~10% of variation in probability of switch to flowering status, while including random effects of sites explained ~20% of the variation across all three species. 
+Since these are cultivated species, the differences in varieties among individuals has a known influence on phenological variation [@makhmale_impact_2016; @singh_phenological_2021]. 
+<!-- However, information on variety of fruit is not recorded in SeasonWatch, and therefore our study could not test the extent of this effect .  -->
+Applicability of these inferences across diverse tropical species with different leaf and reproductive phenology could pose challenges. 
+Reproductive strategies in tropical trees are often diverse and may have long-term evolutionary function in addition to short-term ecological response [@singh_diversity_2006]. 
+Recent studies of stand-level phenology in India have shown peak flowering across species coincident with low precipitation in forests with different types of seasonality [@menon_phenological_2025; @madhavan_phenology_2026], but how these change across species and habitats remains to be understood.
+@borchert_environmental_2004 showed that flowering seasonality in tropical species can be plastic across biome ranges, with greater periodicity in the drier forests across species. 
+We show that even in low latitudes with low seasonality, flowering status and flowering onset within species show strong periodicity and interannual variation associated with climatic variables. 
+Given the phylogenetic distinctiveness among the three species, we are encouraged to conclude that these conclusions could apply over a broader set of species. 
+While large-scale datasets can be difficult to accumulate, emerging techniques using PhenoCams and remote sensing can be used to extend these inferences across diverse species and biomes in the Indian tropics as suggested by @jose_plugging_2023.
+
+
+<!---Old text--->
+
+<!-- Our study, which spans large spatiotemporal scales, strengthens existing understanding on the influence of temperature, precipitation, and solar radiation on tropical tree reproductive phenology [@babweteera_ecology_2018; @cook_divergent_2012; @cook_sensitivity_2012; @mendoza_continentalscale_2017; @dunham_fruiting_2018].  -->
+<!-- Across the three species, recent levels of minimum temperature had the highest influence on the observed flowering status of the tree at any given time, followed by either solar radiation or soil moisture (Fig 2).  -->
+<!-- At the population scale, extremes in precipitation, including drought years, have been shown to reduce flowering and fruiting in tropical trees [@wright_nino_1999; @sakai_tropical_2019; @harrison_repercussions_2000].  -->
+<!-- Our results show that besides total precipitation, soil moisture is an important predictor for observable flowering phenophase at the individual scale, across these widespread species (Fig 2).  -->
+<!-- Taken together, these results suggest that, although large variation exists, tropical tree phenology at the individual level responds to environmental conditions in the short term. -->
+<!-- However, this dataset is, to the best of our knowledge, unprecedented in spatial and temporal scale for reproductive phenology in tropical tree species.   -->
+
+<!-- While the onset of flowering on tropical trees can be triggered by climatic factors, we show that habitat factors had modifying effects on their influence. -->
+<!-- Modelling the probability of flowering onset, we show that low minimum temperatures, dry soils, and higher levels of solar radiation are potential triggers for flowering in jackfruit and mango. -->
+<!-- This corresponds to the seasonal understanding of flowering in these species - with the start of flowering in late December or early January (Fig 1, Appendix S1: Table S1).  -->
+<!-- These results are also in concordance with other studies from the tropics, where cool temperatures, combined with drought conditions were found to trigger flowering in select forest species [@satake_drought_2019]. -->
+<!-- Elsewhere, dry spells followed by single instances of precipitation have been found to trigger flowering [@wright_phenology_2019]. -->
+<!-- In both mango and jackfruit trees, lower minimum temperatures were associated with higher probability of the onset of flowering, and this effect was higher in north and east-facing sites, where there is lower light (Fig 4). -->
+<!-- This result is in concordance with another longitudinal study on forest trees monitored in Uganda where tree location, specifically in relation to light, increased the probability of flowering[@babweteera_ecology_2018].  -->
+<!-- However, this result is in contrast to results from the neotropics, where up to 12 weeks of consistent high solar irradiance predicted flowering in multiple forest species [@wright_solar_2018]. -->
+<!-- Tropical tree leaf exchange and reproductive phenology are known to be altered in urban habitats [@kabano_sensitivity_2020; @neil_effects_2006]. -->
+<!-- Our results from mango trees in Kerala shows that trees at lower elevations had higher probability of flowering in drier soils, and that the effect of solar radiation on flowering probability was obscured in more urban habitats (Fig 4). -->
+<!-- While interaction effects were different across species and not identifiable in some, our results from mango trees, with the largest number of trees in the dataset, shows the potential of identifying these patterns along meaningful scales of variation. -->
+<!-- By assessing multiple modifiers simultaneously, our study makes novel contributions to predictive modelling of tree phenology in tropical habitats where multiple global and local drivers of change co-occur. -->
+
+<!-- Our results on the onset of flowering phenology shows high variation among individuals and sites in three widespread tropical species. -->
+<!-- Tropical tree flowering patterns may not show discrete on/off signals that track the environment as many temperate species do.  -->
+<!-- Jackfruit, mango and tamarind trees showed diffuse and noisy patterns of flowering in Kerala, with this phenophase being reported as present in some proportion of trees in every week of the year in SeasonWatch (Fig 1, [@ramaswami_using_2021]). -->
+<!-- Tree random effect was significant in the models for all three species, suggesting unexplained variation among the individual trees considered that requires further systematic inquiry.  -->
+<!-- Random effect sizes could also be  linked to energy reserves in the growing season, responding to environmental correlates beyond the fortnightly time window that we considered [@babweteera_ecology_2018]. -->
+<!-- Further modelling that includes a forecasting framework and time lags would be an important future direction in tropical phenology research.  -->
+<!-- Beyond the specific spatial factors included in the model, the site random effect explained a large amount of remaining variation. -->
+<!-- A potential contributor could be the spatial scale of environmental data; assessed variables are at the kilometre spatial scale whereas fine-scale heterogeneity in temperature and rainfall can influence trees [@scheffers_extreme_2017]. -->
+<!-- Further research on spatial and temporal drivers can faciliate mechanistic modelling and forecasting of pheonological responses in space and time. -->
+
+Our results become pertinent under existing and future climatic variability in  the tropics, and the potential impacts on the reproductive phenology of commercially important tropical trees. 
+<!-- Global climate phenomena such as the El Nino Southern Oscillation affect temperature and precipitation variability across the tropics, and often results in above-average temperatures or below-average precitpitation [@wright_nino_1999].  -->
+Beyond the timescales of our study, much of the global tropics, is projected to move into a temperature and precipitation regime that has no analog globally, making it difficult to predict and plan for ecosystem responses [@dahinden_future_2017]. 
+Across the Indian subcontinent, precipitation and temperature variability has increased in the past century and is projected to continue to increase [@dahinden_future_2017; @power_robust_2013; @zhang_mechanism_2019]. 
+Moreover, altered climatic processes such as the El Nino Southern Oscillation and Indian Ocean Dipole are affecting weather with consequences for Indian ecosystems [@revadekar_role_2009; @wang_different_2014; @gadgil_nino_2016]. 
+However, climate change predictions and action for the tropics are still largely at coarse spatial scales, making local forecasting and mitigation difficult [@dessai_we_2009; @shepherd_localness_2020]. 
+<!-- Across Kerala, our results from emerging hotspot analyses show spatiotemporal patterning in climate variables associated with flowering phenology in common tree species (Fig 5). -->
+<!-- Although there were no directional patterns in change in variables (new or intensifying hot/cold spots), the years we assessed represent a short timescale. Our analysis of patterns over the last decade showed spatial variation in hotspots and coldspots for temperature and precipitation and their change over time.  -->
+An important future direction for phenological studies would be to understand intraspecific variation across space and forecast phenological responses in these novel climates.
+<!-- However, even in the decade of assessment, we demonstrate low predictability in the direction climate responses in some regions (osciallating hotspots, sporadic hotspots). -->
+<!-- Such uncertainties across years could potentially influence tree responses to climate in these areas assessed.  -->
+<!-- As spatiotemporal patterns in temperature and precipitation are altered by global climate change in tropical landscapes, forecasting phenological change is crucial.  -->
+<!-- This makes it crucial to forecast and mitigate biotic responses to specific environmental correlates as well as combined effects.  -->
+
+# Conclusions {-}
+
+Our study using repeat citizen-science data and individual based modelling at spatial and temporal scales of climate modelling, represents a significant first step in combining tropical ecology with climate science beyond broad generalisations.
+<!-- As a result, climate policy for these regions are lacking in ecologically-derived understanding that prioritises the stability of ecosystem services.  -->
+<!-- In some temperate landscapes, onset of leaf-out phenology can be remotely sensed and therefore measured at the large scale [@czernecki_machine_2018]. -->
+Despite recent remote sensing advances that aid large-scale and repeat measurement of ecosystem structure and change, measurement of tropical reproductive phenology remains challenging [@davis_new_2022; @lee_costeffective_2023]. 
+Species may have inconspicuous flowers and fruits or these phenophases may coexist with leaves, requiring repeat on-ground measurements that are extremely difficult to organise at the large-scale. 
+Citizen science may be one of the few ways to acquire such data, and we have leveraged such a unique dataset compiled by SeasonWatch to predict the onset of a reproductive phenophase [@abernethy_current_2018; @mcdonoughmackenzie_low_2020; @ramaswami_using_2021]. 
+We show that flowering onset in three common tropical species shows seasonality, but considerable variation across years and individuals, some of which is associated with climatic variables in the preceding fortnight.
+Further, habitat factors such as elevation and urbanisation modify the influence of these climatic cues on flowering onset, suggesting that phenological responses to climate change may be context-dependent.
+Broadly, we demonstrate the potential of citizen science observations in improving the state of our knowledge in climate science and infusing local ecology into climate-adaptive management. Predictive modelling informed by variation among individuals and sites is a crucial next step to phenology research as spatiotemporal patterns in climate variables change across tropical landscapes. 
+Our study thus demonstrates the potential of citizen science in filling data gaps from expert-led site-specific monitoring and providing predictions at the large-scale to aid locally relevant climate policies.
+
+<!---Older text--->
+
+<!---Previous studies in other tropical landscapes have documented the effect of interannual variability in rainfall on flowering phenology. ---> 
+<!---Our study establishes critical baselines for tropical tree reproductive phenology at the regional scale, matched with the scale of climate predictions.
+Our study is the first of its kind that leverages community or citizen science for tropical tree phenology, and so our results also demonstrate the challenges and opportunities towards predictive climate science without compromising fine-scale resolution. ----> 
+<!---Our results from modelling of the predictors of flowering on individual trees across a large spatial extent shows the quantum of variation across species and sites.---> 
+<!--Despite the scale of this dataset, predictive models for tamarind had low accuracy, perhaps due to the distribution of the trees assessed.
+However, as the dataset continues to grow, so does the opportunity to address such focussed questions that need specialised data.-->
+<!---Our results show that the divergence among spatial locations is higher under drier environmental conditions; at low total precipitation and high number of dry days (Fig 4).---->
+<!----More trivially, while citizen science data is powerful to make inferences over large scales, the lack of predictive power for phenophase intensity is potentially indicative of variability in observers while recording fine-scale information, increasing noise [@bush_effective_2018].
+To test the influence of observer bias, we also modelled the generalised linear mixed models with User ID as a random effect and found significant variation among users (Table S1 and S2).
+Estimating user variability and incorporating it into future models can potentially improve predictions.---->
+<!---Our study that leverages a unique and extensive citizen science phenology dataset demonstrates the advantages of using these methods to expand the spatial and temporal resolution of climate predictions, including in novel climates. --->
+<!---Besides quantitative information, several citizen scientists have also raised interesting anecdotal observations and cultural knowledge about the flowering of these species at SeasonWatch meetings.
+An important step forward would be to integrate these diverse knowledge systems to generate ground-up predictions and create policies for change at the local scale.---->
+
+
+# Ethics approval {-}
+The study did not deal with human subjects or data with personal identifiers. For SeasonWatch data, we followed ethical protocol that was agreed on by the SeasonWatch Citizen Scientist Network.
+
+# Consent for participation and publication {-}
+Not applicable
+
+# Availability of data and materials {-}
+Data are not yet provided. Environmental data used in this manuscript are from publicly available sources. All SeasonWatch data, the phenology data used in the manuscript, is licensed under the open-access creative commons license CC BY 4.0: https://creativecommons.org/licenses/by/4.0/ and is available upon request. Processed data and code used in this manuscript will be made publicly accessible through Zenodo upon acceptance of the manuscript.
+
+# Competing interests {-}
+The authors have no competing interests to declare.
+
+# Funding sources {-}
+The analysis was funded by the Booster Programme at the Patrick J McGovern Foundation. SeasonWatch data collection was supported by the Wipro Foundation.
+
+# Author contributions {-}
+Funding for this work was acquired by GR and NA, while the study was conceptualised by GR and KA. Phenology data was collected by the SeasonWatch Citizen Scientist Network. KA cleaned and validated the phenology data while JM accessed and collated the geospatial data. KA, JM, CL and RR performed the analysis led by KA and supervised by GR and NA, with administrative support from HT. KA visualised the data and wrote the first draft; KA, JM and GR edited the manuscript with support from all authors. 
+
+# Acknowledgements {-}
+The authors would like to acknowledge the SeasonWatch team for support during this work, especially Mohammed Nizar, who helped in the manual validation of parts of the data. We also thank Karthik T, Anand M O, Suhel Quader and the NCF EPE team for discussions on data management, analyses and interpretations. SW is grateful for the support of the Wipro Foundation for their continued efforts.
+
+\newpage
+
+# Tables {-}
+
+_**Table 1: Data distributions.**Description of the SeasonWatch dataset for jackfruit, mango and tamarind in Kerala from January 2014 to July 2022_
+
+```{r eval = TRUE, echo=FALSE, warning=FALSE, message=F}
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+library(flextable)
+set_flextable_defaults(font.family = "Times New Roman", font.size = 10)
+species_data <- read.csv("display/sp_data.csv", stringsAsFactors = FALSE, check.names = FALSE)
+colnames(species_data)[1] <- " "
+ft <- flextable(species_data)
+ft <- autofit(ft)
+# ft <- width(ft, 1, width = 1.5)
+# ft <- width(ft, 2:4, width = 2)
+# ft<-hline(ft, i=c(9,10))
+ft <- vline(ft, j = 1)
+# border_inner_h()
+# ft<-surround(ft, i=10, border.top = std_border, border.bottom=std_border)
+# ft <- width(ft, 5, width = 1.5)
+ft
+```
+
+\newpage
+
+_**Table 2: Environmental data.** Variables, data sources and transformations_
+
+
+```{r eval = TRUE, echo=FALSE, warning=FALSE, message=F}
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+library(flextable)
+set_flextable_defaults(font.family = "Times New Roman", font.size = 10)
+env_data <- read.csv("display/env_vars.csv", stringsAsFactors = FALSE, check.names = FALSE)
+# colnames(env_data)[1]<-" "
+ft <- flextable(env_data)
+ft <- autofit(ft)
+ft <- width(ft, 2, width = 2)
+ft <- width(ft, 3:5, width = 1.5)
+ft <- hline(ft, i = seq(2, 12, by = 2))
+ft <- vline(ft, j = 1)
+# border_inner_h()
+# ft<-surround(ft, i=10, border.top = std_border, border.bottom=std_border)
+# ft <- width(ft, 5, width = 1.5)
+ft
+```
+
+\newpage
+
+# Figure captions {-}
+
+**Figure 1: SeasonWatch protocol, species and map of observations.** a) SeasonWatch observation protocol for tree phenology - phenophase quantities ‘none’, ‘few’, ‘many’ roughly correspond to the presence of a phenophase in 0, 30%, and >30% of the tree canopy  b) Outline of India with the state of Kerala marked in grey. 
+c), d) and e) - map of observations of jackfruit, mango and tamarind trees across Kerala, considered in this study. 
+Panels f), g) and h) show seasonal patterns in flowering of the three species in Kerala from 2014-2022. 
+Dots represent mean proportion of trees flowering in that week and error bars represent standard deviation across the years of study. 
+Image credits: a) Sayee Girdhari for SeasonWatch.
+
+<!-- **Figure 2: Variable importance from machine learning models of flowering occurrence**  Mean Decrease in Accuracy from Random Forest models of the probability of observing flowering in a) jackfruit, b) mango, c) tamarind. Variable importance has been calculated at each LOOCV run, Length of the bars represent mean MDA across the runs and variables are ordered in their decreasing order of mean importance. Thick black error bars represent 1 standard deviation from the mean and the thin bars represent 1.96 standard deviation from the mean across the runs.--->   
+
+**Figure 2: Mean date of flowering presence and flowering onset** from 2014-2022 for the species of interest in Kerala. 
+Bootstrapped estimates of flowering presence from weekly observations each year for a) jackfruit, b) mango, and c) tamarind. 
+Bootstrapped estimates of flowering onset (first definitive observation of flowering on any tree) from weekly observations each year for d) jackfruit, e) mango, and f) tamarind. 
+For a given year, arrow direction represents the mean week and arrow length represents z-score, a measure of degree of clustering from a bootstrapped Rayleigh test. 
+See methods for details on how these were calculated.
+
+**Figure 3: Variability in flowering onset across years for the same tree** from 2014-2022. 
+Distribution of mean week of flowering onset across years for trees with multiple onset observations for a) jackfruit, b) mango, and c) tamarind. 
+Distribution of the standard deviation of flowering onset weeks for trees of a) jackfruit, b) mango, and c) tamarind. 
+
+**Figure 4: Model coefficients for flowering onset from GLMM models** Generalised linear mixed effect models (with a binomial family of errors) modelling flowering onset; i.e. the probability of observing flowering given no flowering at the previous timestep. 
+Model includes most influential temperature variable, precipitation variable from the ML models and solar radiation. 
+Model also includes all interactions barring known correlated combinations. 
+Dots reporesent mean effect and the lines represent 95% confidence intervals of the estimate. 
+The vertical grey line represents no-effect. 
+Predictors with confidence intervals that do not overlap with the no-effect line are considered significant; others are represented with grey dots.  <!---(display/Fig3.png)--->
+
+<!-- **Figure 4: Predicted responses of flowering phenology of jackfruit, mango and tamarind trees (left to right) to interactions between static and time-varying environmental predictors.** Mean and interaction effects derived from generalised linear mixed models of each species using binary response variables. Flowering probability is represented as a function of each time-varying environmental variable at three levels of the static variable - mean value and mean+/- 1 sd for the range of observed values, with the low value represented as red, mean as black and high as blue. Lines represent binary model predictions and the ribbons around the lines represent 95% confidence intervals. Dots represent observed values of flowering. For main effects that are significant and interactions that are not significant, lines and points are represented in grey. For main effects that are not significant, only the data is plotted and not the predicted lines. -->
+
+<!-- **Figure 5 - Hotspot analysis of environmental data using spatiotemporal data from 2014-2022.** Hotspot analyses for a) minimum temperature within a fortnight, b) soil moisture within the fortnight and c) solar radiation within the fortnight within each grid of 11 km x 11 km spatial resolution -->
+
+# References {-}

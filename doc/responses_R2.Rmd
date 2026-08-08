@@ -1,0 +1,48 @@
+---
+title: ""
+output:
+    bookdown::word_document2: 
+      # reference_docx: word-styles-reference.docx #make sure this line is indented! see this guide for formatting: https://rmarkdown.rstudio.com/articles_docx.html
+      reference_docx: word-styles-reference-singlespace.docx #make sure this line is indented! see this guide #pdf_document: 
+bibliography: seasonwatch_climate.bib
+suppress-bibliography: false
+csl: ecological-applications.csl
+---
+
+Dear Editor,
+
+We are pleased to submit a revised version of our manuscript, "Long-term citizen science data reveals climate influences of tropical tree flowering at the regional scale" (IJBM-D-26-00015R1) for consideration for publication in International Journal of Biometeorology. 
+We have addressed all points raised by the reviewers as detailed in our responses to the reviewers. 
+
+Thank you for considering this revised version for publication. 
+We look forward to your response.
+
+Sincerely,
+On behalf of all coauthors,  
+Krishna Anujan
+
+\newpage
+
+
+## Reviewers' comments:
+
+
+Reviewer #2: Line 42  triggered by environmental cues like temperature, rainfall events, dry spells, and photoperiod, and is therefore sensitive to a changing environment. Photoperiod is not sensitive to a changing climate. Changes to flowering, however, may expose plants to different photoperiods. Hence this sentence should be reworded
+
+**RESPONSE: Thanks, we have now reworded this to: "Flowering in trees is triggered by environmental cues like temperature, rainfall events, dry spells, and photoperiod [@chang-yang_enso_2016; @chapman_longterm_2005; @pau_longterm_2018; @capovilla_control_2015]. These cues are directly or indirectly altered by changing climate, potentially affecting flowering phenology in trees."**
+
+Line 58 formatting of Chaturvedi et al. (2021); Devi et al. (2023). The comment wasn't about specifically missing the 2019 reference by Wright et al but that this author has published extensively in tropical phenology, particularly Barro Colorado Island as has Morellato and their colleagues. I agree in general that tropical reproductive phenology information is lacking but it is well studied in particular areas as exemplified by Wright. So remove but see Wright et al. (2019) and consider being more nuanced
+
+**RESPONSE: Thank you for making this comment clearer. We have now edited this to read: "There is a growing understanding of the influence of environmental factors on leaf phenology of tropical species[@chaturvedi_functional_2021; @devi_phenological_2023]. However, with the exception of focused regions that are intensively monitored, [e.g. Pasoh, Malaysia in @chen_speciesspecific_2018; Barro Colorado Island, Panama in @wright_phenology_2019] information on tropical reproductive phenology is generally lacking."**  
+**We have also fixed the formatting of the references.**
+
+Line 292: considering two decimal places have been used for jackfruit and mango should also tamarind also has two - but given this is weekly data strongly suggest changing to one decimal place for all.
+
+**RESPONSE: Thanks for this observation, we have now changed this to one decimal place for all.**
+
+Line 477 change dipole to Dipole
+
+**RESPONSE: Thanks, we have fixed this.**
+
+
+
