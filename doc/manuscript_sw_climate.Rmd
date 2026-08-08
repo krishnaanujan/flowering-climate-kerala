@@ -31,20 +31,10 @@ library(lubridate)
 sw_spat <- readRDS("../data/modified_data/sw_spat.RDS")
 sw_first <- readRDS("../data/modified_data/start_nomiss.RDS")
 
-# read models
-# jack_bin_start <- readRDS("../models/onset_models/jack_full.RDS")
-# mango_bin_start <- readRDS("../models/onset_models/mango_full.RDS")
-# tam_bin_start <- readRDS("../models/onset_models/tam_full.RDS")
-
 
 jack_bin_start <- readRDS("../models/onset_models/jack_full_month_first.RDS")
 mango_bin_start <- readRDS("../models/onset_models/mango_full_month_first.RDS")
 tam_bin_start <- readRDS("../models/onset_models/tam_full_month_first.RDS")
-
-# loocv glmm results
-# jpreds <- read.csv("../models/onset_models/jack_loocv_preds.csv")
-# mpreds <- read.csv("../models/onset_models/mango_loocv_preds.csv")
-# tpreds <- read.csv("../models/onset_models/tam_loocv_preds.csv")
 
 jpreds <- read.csv("../models/onset_models/jack_first_loocv_preds.csv")
 mpreds <- read.csv("../models/onset_models/mango_first_loocv_preds.csv")
