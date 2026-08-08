@@ -1,0 +1,781 @@
+---
+title: "03_ml_analysis"
+author: "Krishna Anujan"
+#date: "2024-04-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r functions}
+# F1 scores------------------------
+
+f1 <- function(pred, obs) {
+  acc <- rep(NA, length(obs))
+  acc[which(pred == 1 & obs == 1)] <- "TP" # true positive
+  acc[which(pred == 0 & obs == 0)] <- "TN" # true negative
+  acc[which(pred == 0 & obs == 1)] <- "FN" # false negative
+  acc[which(pred == 1 & obs == 0)] <- "FP" # false positive
+
+  # F1 score is 2*(precision*recall)/(precision+recall)
+  # precision = TP/(TP+FP)
+  # recall = TP/ (TP+FN)
+
+  precision <- table(acc)[4] / (table(acc)[4] + table(acc)[2])
+  recall <- table(acc)[4] / (table(acc)[4] + table(acc)[1])
+
+  f1 <- 2 * (precision * recall) / (precision + recall)
+
+  return(f1)
+}
+```
+
+```{r ml}
+library(randomForestSRC)
+library(dplyr)
+library(randomForest)
+# install.packages("ggRandomForests")
+# library(ggRandomForests)
+library(caret)
+
+rm(list = ls())
+
+sw_spat <- readRDS("data/modified_data/sw_spat.RDS")
+
+# jack<-sw_spat %>%
+#  filter(diffdays==7,
+#         Species_name=="Artocarpus heterophyllus")
+
+jack <- sw_spat %>%
+  filter(Species_name == "Artocarpus heterophyllus")
+
+# jack
+
+library(tidyverse)
+
+jack_ml <- jack %>%
+  # dplyr::select(grep("FN", colnames(jack), value=T), fl_binary, year, fl_binary_prev)
+  dplyr::select(grep("FN", colnames(jack), value = T), fl_binary, year)
+jack_ml <- jack_ml %>%
+  # dplyr::select(!grep("cs", colnames(jack_ml), value=T), fl_binary, year) %>%
+  mutate(
+    mean_temp = scale(FNMean_MeanTemp),
+    min_temp = scale(FNMean_MinTemp),
+    max_temp = scale(FNMean_MaxTemp),
+    solar_rad = scale(FNSum_SolarRad),
+    precip = scale(FNSum_PCP),
+    dry_days = scale(FNSum_ConsDryDays),
+    soil_moisture = scale(FNMean_MeanSM)
+  ) %>%
+  dplyr::select(!grep("FN", colnames(jack_ml), value = T))
+
+
+
+# loop for LOOCV
+
+preds <- data.frame(NA, NA, NA)
+colnames(preds) <- c("obs", "pred", "year")
+preds <- preds[F, ]
+
+vimp <- data.frame(var = colnames(dplyr::select(jack_ml, -c("fl_binary", "year"))))
+
+for (i in 1:length(unique(jack_ml$year))) {
+  yr <- unique(jack_ml$year)[i]
+  # subset
+  training <- dplyr::select(jack_ml[jack_ml$year != yr, ], -"year")
+  testing <- dplyr::select(jack_ml[jack_ml$year == yr, ], -"year")
+
+  # prepping for analysis
+  training <- training[complete.cases(training) == T, ]
+  testing <- testing[complete.cases(testing) == T, ]
+  training$fl_binary <- factor(as.character(training$fl_binary), levels = c("0", "1"))
+  testing$fl_binary <- factor(as.character(testing$fl_binary), levels = c("0", "1"))
+
+  names(training) <- make.names(names(training))
+  rf_jack <- randomForest::randomForest(fl_binary ~ ., importance = T, data = training)
+
+
+  predictions.rf <- predict(rf_jack, newdata = testing)
+  pred.df <- data.frame(obs = testing[, "fl_binary"], pred = predictions.rf, year = rep(yr, year = length(predictions.rf)))
+
+  preds <- rbind(preds, pred.df)
+
+
+  # vimp_mean<-caret::varImp(rf_jack)
+  vimp_mean <- data.frame(importance(rf_jack, type = 1))
+  vimp <- cbind(vimp, vimp_mean[, 1])
+  colnames(vimp)[ncol(vimp)] <- as.character(yr)
+}
+
+write.csv(vimp, "models/ML/vimp_jack_noyr.csv", row.names = F)
+write.csv(preds, "models/ML/preds_jack_noyr.csv", row.names = F)
+# write.csv(vimp, "models/ML/vimp_jack_withprev.csv", row.names = F)
+# write.csv(preds, "models/ML/preds_jack_withprev.csv", row.names = F)
+
+preds <- read.csv("models/ML/preds_jack_noyr.csv")
+
+confusionMatrix(preds$pred, preds$obs)
+preds$obs.num <- as.numeric(as.character(preds$obs))
+preds$pred.num <- as.numeric(as.character(preds$pred))
+R2_jack <- 1 - (sum((preds$obs.num - preds$pred.num)^2) / sum((preds$obs.num - mean(preds$obs.num))^2))
+
+F1_jack <- f1(pred = preds$pred.num, obs = preds$obs.num)
+
+
+library(dplyr)
+vimp_jack <- vimp
+# vimp_jack<-read.csv("models/ML/vimp_jack.csv")
+vimp_jack <- read.csv("models/ML/vimp_jack_noyr.csv")
+vimp_jack$mean <- rowMeans(vimp_jack[, 2:ncol(vimp_jack)])
+vimp_jack$sd <- apply(vimp_jack[, 2:(ncol(vimp_jack) - 1)], 1, sd)
+vimp_jack$sd_1.6 <- vimp_jack$sd * 1.6
+```
+
+```{r ml mango}
+mango_ml <- mango %>%
+  dplyr::select(grep("FN", colnames(mango), value = T), fl_binary, year)
+mango_ml <- mango_ml %>%
+  # dplyr::select(!grep("cs", colnames(mango_ml), value=T))%>%
+  mutate(
+    mean_temp = scale(FNMean_MeanTemp),
+    min_temp = scale(FNMean_MinTemp),
+    max_temp = scale(FNMean_MaxTemp),
+    solar_rad = scale(FNSum_SolarRad),
+    precip = scale(FNSum_PCP),
+    dry_days = scale(FNSum_ConsDryDays),
+    soil_moisture = scale(FNMean_MeanSM)
+  ) %>%
+  dplyr::select(!grep("FN", colnames(mango_ml), value = T))
+
+
+# loop for LOOCV
+
+preds <- data.frame(NA, NA, NA)
+colnames(preds) <- c("obs", "pred", "year")
+preds <- preds[F, ]
+
+vimp <- data.frame(var = colnames(dplyr::select(mango_ml, -c("fl_binary", "year"))))
+
+for (i in 1:length(unique(mango_ml$year))) {
+  yr <- unique(mango_ml$year)[i]
+  # subset
+  training <- dplyr::select(mango_ml[mango_ml$year != yr, ], -"year")
+  testing <- dplyr::select(mango_ml[mango_ml$year == yr, ], -"year")
+
+  # prepping for analysis
+  training <- training[complete.cases(training) == T, ]
+  testing <- testing[complete.cases(testing) == T, ]
+  training$fl_binary <- factor(as.character(training$fl_binary), levels = c("0", "1"))
+  testing$fl_binary <- factor(as.character(testing$fl_binary), levels = c("0", "1"))
+
+  names(training) <- make.names(names(training))
+  rf_mango <- randomForest::randomForest(fl_binary ~ ., importance = T, data = training)
+
+
+  predictions.rf <- predict(rf_mango, newdata = testing)
+  pred.df <- data.frame(obs = testing[, "fl_binary"], pred = predictions.rf, year = rep(yr, year = length(predictions.rf)))
+
+  preds <- rbind(preds, pred.df)
+
+
+  # vimp_mean<-caret::varImp(rf_mango)
+  vimp_mean <- data.frame(importance(rf_mango, type = 1))
+  vimp <- cbind(vimp, vimp_mean[, 1])
+  colnames(vimp)[ncol(vimp)] <- as.character(yr)
+}
+
+write.csv(vimp, "models/ML/vimp_mango_noyr.csv", row.names = F)
+write.csv(preds, "models/ML/preds_mango_noyr.csv", row.names = F)
+
+preds <- read.csv("models/ML/preds_mango_noyr.csv")
+
+
+confusionMatrix(preds$pred, preds$obs)
+preds$obs.num <- as.numeric(as.character(preds$obs))
+preds$pred.num <- as.numeric(as.character(preds$pred))
+R2_mango <- 1 - (sum((preds$obs.num - preds$pred.num)^2) / sum((preds$obs.num - mean(preds$obs.num))^2))
+
+F1_mango <- f1(pred = preds$pred.num, obs = preds$obs.num)
+
+
+library(dplyr)
+vimp_mango <- read.csv("models/ML/vimp_mango_noyr.csv")
+vimp_mango$mean <- rowMeans(vimp_mango[, 2:ncol(vimp_mango)])
+vimp_mango$sd <- apply(vimp_mango[, 2:(ncol(vimp_mango) - 1)], 1, sd)
+vimp_mango$sd_1.6 <- vimp_mango$sd * 1.6
+```
+```{r ml tamarind}
+tam_ml <- tam %>%
+  dplyr::select(grep("FN", colnames(tam), value = T), fl_binary, year)
+tam_ml <- tam_ml %>%
+  # dplyr::select(grep("cs", colnames(tam_ml), value=T), fl_binary, year)%>%
+  mutate(
+    mean_temp = scale(FNMean_MeanTemp),
+    min_temp = scale(FNMean_MinTemp),
+    max_temp = scale(FNMean_MaxTemp),
+    solar_rad = scale(FNSum_SolarRad),
+    precip = scale(FNSum_PCP),
+    dry_days = scale(FNSum_ConsDryDays),
+    soil_moisture = scale(FNMean_MeanSM)
+  ) %>%
+  dplyr::select(!grep("FN", colnames(tam_ml), value = T))
+
+
+# loop for LOOCV
+
+preds <- data.frame(NA, NA, NA)
+colnames(preds) <- c("obs", "pred", "year")
+preds <- preds[F, ]
+
+vimp <- data.frame(var = colnames(dplyr::select(tam_ml, -c("fl_binary", "year"))))
+
+for (i in 1:length(unique(tam_ml$year))) {
+  yr <- unique(tam_ml$year)[i]
+  # subset
+  training <- dplyr::select(tam_ml[tam_ml$year != yr, ], -"year")
+  testing <- dplyr::select(tam_ml[tam_ml$year == yr, ], -"year")
+
+  # prepping for analysis
+  training <- training[complete.cases(training) == T, ]
+  testing <- testing[complete.cases(testing) == T, ]
+  training$fl_binary <- factor(as.character(training$fl_binary), levels = c("0", "1"))
+  testing$fl_binary <- factor(as.character(testing$fl_binary), levels = c("0", "1"))
+
+  names(training) <- make.names(names(training))
+  rf_tam <- randomForest::randomForest(fl_binary ~ ., importance = T, data = training)
+
+
+  predictions.rf <- predict(rf_tam, newdata = testing)
+  pred.df <- data.frame(obs = testing[, "fl_binary"], pred = predictions.rf, year = rep(yr, year = length(predictions.rf)))
+
+  preds <- rbind(preds, pred.df)
+
+
+  # vimp_mean<-caret::varImp(rf_tam)
+  vimp_mean <- data.frame(importance(rf_tam, type = 1))
+  vimp <- cbind(vimp, vimp_mean[, 1])
+  colnames(vimp)[ncol(vimp)] <- as.character(yr)
+}
+
+write.csv(vimp, "models/ML/vimp_tam_noyr.csv", row.names = F)
+write.csv(preds, "models/ML/preds_tam_noyr.csv", row.names = F)
+
+preds <- read.csv("models/ML/preds_tam_noyr.csv")
+
+confusionMatrix(preds$pred, preds$obs)
+preds$obs.num <- as.numeric(as.character(preds$obs))
+preds$pred.num <- as.numeric(as.character(preds$pred))
+R2_tam <- 1 - (sum((preds$obs.num - preds$pred.num)^2) / sum((preds$obs.num - mean(preds$obs.num))^2))
+
+F1_tam <- f1(pred = preds$pred.num, obs = preds$obs.num)
+
+
+library(dplyr)
+vimp_tam <- read.csv("models/ML/vimp_tam_noyr.csv")
+vimp_tam$mean <- rowMeans(vimp_tam[, 2:ncol(vimp_tam)])
+vimp_tam$sd <- apply(vimp_tam[, 2:(ncol(vimp_tam) - 1)], 1, sd)
+vimp_tam$sd_1.6 <- vimp_tam$sd * 1.6
+```
+
+```{r plots from random forest}
+labs_list <- list(
+  "FNSum_PCP_cs" = "precipitation",
+  "elev_cs" = "elevation",
+  "FNMean_MaxTemp_cs" = "max temperature",
+  "FNMean_MeanSM_cs" = "soil moisture",
+  "FNSum_DryDays_cs" = "dry days",
+  "aspect_cs" = "aspect",
+  "light_cs" = "urbanisation",
+  "User_Tree_id" = "Tree ID",
+  "FNMean_MinTemp_cs" = "minimum temperature",
+  "FNMean_MeanTemp_cs" = "mean temperature",
+  "FNSum_SolarRad_cs" = "solar radiation"
+)
+
+labs_list2 <- list(
+  "precip" = "precipitation",
+  "max_temp" = "max temperature",
+  "soil_moisture" = "soil moisture",
+  "dry_days" = "dry days",
+  "min_temp" = "minimum temperature",
+  "mean_temp" = "mean temperature",
+  "solar_rad" = "solar radiation"
+)
+
+library(ggplot2)
+
+# fmt <- "R^2 == %.3f"
+fmt2 <- "F1 == %.3f"
+lab2 <- sprintf(fmt2, F1_jack)
+
+vimp_jack_plot <- ggplot(vimp_jack, aes(x = reorder(var, mean), weight = mean)) +
+  geom_bar(fill = "#1e824c") +
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0, size = 1) +
+  geom_errorbar(aes(ymin = mean - sd_1.6, ymax = mean + sd_1.6), width = 0, size = 0.5) +
+  ylab("Variable Importance") +
+  xlab("") +
+  scale_x_discrete(labels = labs_list2) +
+  guides(fill = F) +
+  labs(tag = "a)") +
+  ggtitle("Jackfruit flowering probability") +
+  annotate("text",
+    x = 1, y = 100, label = lab2,
+    parse = TRUE, hjust = 0
+  ) +
+  coord_flip() +
+  theme_bw()
+vimp_jack_plot
+
+lab2 <- sprintf(fmt2, F1_mango)
+
+vimp_mango_plot <- ggplot(vimp_mango, aes(x = reorder(var, mean), weight = mean)) +
+  geom_bar(fill = "#f7ca18") +
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0, size = 1) +
+  geom_errorbar(aes(ymin = mean - sd_1.6, ymax = mean + sd_1.6), width = 0, size = 0.5) +
+  ylab("Variable Importance") +
+  xlab("") +
+  scale_x_discrete(labels = labs_list2) +
+  guides(fill = F) +
+  labs(tag = "b)") +
+  ggtitle("Mango flowering probability") +
+  annotate("text",
+    x = 1, y = 100, label = lab2,
+    parse = TRUE, hjust = 0
+  ) +
+  coord_flip() +
+  theme_bw()
+vimp_mango_plot
+
+lab2 <- sprintf(fmt2, F1_tam)
+
+vimp_tam_plot <- ggplot(vimp_tam, aes(x = reorder(var, mean), weight = mean)) +
+  geom_bar(fill = "#a6915c") +
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0, size = 1) +
+  geom_errorbar(aes(ymin = mean - sd_1.6, ymax = mean + sd_1.6), width = 0, size = 0.5) +
+  ylab("Variable Importance") +
+  xlab("") +
+  scale_x_discrete(labels = labs_list2) +
+  guides(fill = F) +
+  labs(tag = "c)") +
+  ggtitle("Tamarind flowering probability") +
+  annotate("text",
+    x = 1, y = 100, label = lab2,
+    parse = TRUE, hjust = 0
+  ) +
+  coord_flip() +
+  theme_bw()
+vimp_tam_plot
+
+library(gridExtra)
+library(patchwork)
+
+# png("doc/display/Fig2.png", width=12, height=4, units="in", res=300)
+png("doc/display/Fig2_noyr.png", width = 12, height = 4, units = "in", res = 300)
+grid.arrange(vimp_jack_plot, vimp_mango_plot, vimp_tam_plot, nrow = 1)
+# vimp_mean_plot+vimp_invcv_plot
+dev.off()
+```
+```{r confusion matrix}
+# jack
+
+preds.jack <- read.csv("models/ML/preds_jack.csv")
+cm_jack <- confusionMatrix(factor(preds.jack$pred, levels = c("0", "1")), factor(preds.jack$obs, levels = c("0", "1")), dnn = c("Prediction", "Reference"))
+
+plt <- as.data.frame(cm_jack$table)
+plt$Prediction <- factor(plt$Prediction, levels = rev(levels(plt$Prediction)))
+
+cm_plot_jack <- ggplot(plt, aes(Prediction, Reference, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq)) +
+  scale_fill_gradient(low = "white", high = "#009194") +
+  labs(x = "Reference", y = "Prediction") +
+  ggtitle("jackfruit flowering ML model") +
+  theme_minimal()
+cm_plot_jack
+
+# mango
+preds.mango <- read.csv("models/ML/preds_mango.csv")
+cm_mango <- confusionMatrix(factor(preds.mango$pred, levels = c("0", "1")), factor(preds.mango$obs, levels = c("0", "1")), dnn = c("Prediction", "Reference"))
+
+plt <- as.data.frame(cm_mango$table)
+plt$Prediction <- factor(plt$Prediction, levels = rev(levels(plt$Prediction)))
+
+cm_plot_mango <- ggplot(plt, aes(Prediction, Reference, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq)) +
+  scale_fill_gradient(low = "white", high = "#009194") +
+  labs(x = "Reference", y = "Prediction") +
+  ggtitle("mango flowering ML model") +
+  theme_minimal()
+cm_plot_mango
+
+
+# tam
+preds.tam <- read.csv("models/ML/preds_tam.csv")
+cm_tam <- confusionMatrix(factor(preds.tam$pred, levels = c("0", "1")), factor(preds.tam$obs, levels = c("0", "1")), dnn = c("Prediction", "Reference"))
+
+plt <- as.data.frame(cm_tam$table)
+plt$Prediction <- factor(plt$Prediction, levels = rev(levels(plt$Prediction)))
+
+cm_plot_tam <- ggplot(plt, aes(Prediction, Reference, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq)) +
+  scale_fill_gradient(low = "white", high = "#009194") +
+  labs(x = "Reference", y = "Prediction") +
+  ggtitle("tamarind flowering ML model") +
+  theme_minimal()
+cm_plot_tam
+
+png("doc/display/SFig_confusion.png", width = 12, height = 4, units = "in", res = 300)
+grid.arrange(cm_plot_jack, cm_plot_mango, cm_plot_tam, nrow = 1)
+# vimp_mean_plot+vimp_invcv_plot
+dev.off()
+```
+
+```{r repeat with onset data}
+library(randomForestSRC)
+library(dplyr)
+library(randomForest)
+# install.packages("ggRandomForests")
+# library(ggRandomForests)
+library(caret)
+
+rm(list = ls())
+
+start_nomiss <- readRDS("data/modified_data/start_nomiss.RDS")
+
+
+# jack<-sw_spat %>%
+#  filter(diffdays==7,
+#         Species_name=="Artocarpus heterophyllus")
+
+jack <- start_nomiss %>%
+  filter(Species_name == "Artocarpus heterophyllus")
+
+# jack
+
+library(tidyverse)
+
+jack_ml <- jack %>%
+  # dplyr::select(grep("FN", colnames(jack), value=T), fl_binary, year, fl_binary_prev)
+  dplyr::select(grep("FN", colnames(jack), value = T), fl_binary, year)
+jack_ml <- jack_ml %>%
+  # dplyr::select(!grep("cs", colnames(jack_ml), value=T), fl_binary, year) %>%
+  mutate(
+    mean_temp = scale(FNMean_MeanTemp),
+    min_temp = scale(FNMean_MinTemp),
+    max_temp = scale(FNMean_MaxTemp),
+    solar_rad = scale(FNSum_SolarRad),
+    precip = scale(FNSum_PCP),
+    dry_days = scale(FNSum_ConsDryDays),
+    soil_moisture = scale(FNMean_MeanSM)
+  ) %>%
+  dplyr::select(!grep("FN", colnames(jack_ml), value = T))
+
+
+
+# loop for LOOCV
+
+preds <- data.frame(NA, NA, NA)
+colnames(preds) <- c("obs", "pred", "year")
+preds <- preds[F, ]
+
+vimp <- data.frame(var = colnames(dplyr::select(jack_ml, -c("fl_binary", "year"))))
+
+for (i in 1:length(unique(jack_ml$year))) {
+  yr <- unique(jack_ml$year)[i]
+  # subset
+  training <- dplyr::select(jack_ml[jack_ml$year != yr, ], -"year")
+  testing <- dplyr::select(jack_ml[jack_ml$year == yr, ], -"year")
+
+  # prepping for analysis
+  training <- training[complete.cases(training) == T, ]
+  testing <- testing[complete.cases(testing) == T, ]
+  training$fl_binary <- factor(as.character(training$fl_binary), levels = c("0", "1"))
+  testing$fl_binary <- factor(as.character(testing$fl_binary), levels = c("0", "1"))
+
+  names(training) <- make.names(names(training))
+  rf_jack <- randomForest::randomForest(fl_binary ~ ., importance = T, data = training)
+
+
+  predictions.rf <- predict(rf_jack, newdata = testing)
+  pred.df <- data.frame(obs = testing[, "fl_binary"], pred = predictions.rf, year = rep(yr, year = length(predictions.rf)))
+
+  preds <- rbind(preds, pred.df)
+
+
+  # vimp_mean<-caret::varImp(rf_jack)
+  vimp_mean <- data.frame(importance(rf_jack, type = 1))
+  vimp <- cbind(vimp, vimp_mean[, 1])
+  colnames(vimp)[ncol(vimp)] <- as.character(yr)
+}
+
+write.csv(vimp, "models/ML/vimp_jack_onset.csv", row.names = F)
+write.csv(preds, "models/ML/preds_jack_onset.csv", row.names = F)
+# write.csv(vimp, "models/ML/vimp_jack_withprev.csv", row.names = F)
+# write.csv(preds, "models/ML/preds_jack_withprev.csv", row.names = F)
+
+preds <- read.csv("models/ML/preds_jack_onset.csv")
+preds$obs <- factor(preds$fl_binary, levels = c("0", "1"))
+preds$pred <- factor(preds$pred, levels = c("0", "1"))
+confusionMatrix(preds$pred, preds$obs)
+preds$obs.num <- as.numeric(as.character(preds$fl_binary))
+preds$pred.num <- as.numeric(as.character(preds$pred))
+R2_jack <- 1 - (sum((preds$obs.num - preds$pred.num)^2, na.rm = T) / sum((preds$obs.num - mean(preds$obs.num, na.rm = T))^2, na.rm = T))
+
+F1_jack <- f1(pred = preds$pred.num, obs = preds$obs.num)
+
+
+library(dplyr)
+vimp_jack <- vimp
+# vimp_jack<-read.csv("models/ML/vimp_jack.csv")
+vimp_jack <- read.csv("models/ML/vimp_jack_onset.csv")
+vimp_jack$mean <- rowMeans(vimp_jack[, 2:ncol(vimp_jack)])
+vimp_jack$sd <- apply(vimp_jack[, 2:(ncol(vimp_jack) - 1)], 1, sd)
+vimp_jack$sd_1.6 <- vimp_jack$sd * 1.6
+```
+
+```{r ml mango onset}
+mango <- start_nomiss %>%
+  filter(Species_name == "Mangifera indica")
+mango_ml <- mango %>%
+  dplyr::select(grep("FN", colnames(mango), value = T), fl_binary, year)
+mango_ml <- mango_ml %>%
+  # dplyr::select(!grep("cs", colnames(mango_ml), value=T))%>%
+  mutate(
+    mean_temp = scale(FNMean_MeanTemp),
+    min_temp = scale(FNMean_MinTemp),
+    max_temp = scale(FNMean_MaxTemp),
+    solar_rad = scale(FNSum_SolarRad),
+    precip = scale(FNSum_PCP),
+    dry_days = scale(FNSum_ConsDryDays),
+    soil_moisture = scale(FNMean_MeanSM)
+  ) %>%
+  dplyr::select(!grep("FN", colnames(mango_ml), value = T))
+
+
+# loop for LOOCV
+
+preds <- data.frame(NA, NA, NA)
+colnames(preds) <- c("obs", "pred", "year")
+preds <- preds[F, ]
+
+vimp <- data.frame(var = colnames(dplyr::select(mango_ml, -c("fl_binary", "year"))))
+
+for (i in 1:length(unique(mango_ml$year))) {
+  yr <- unique(mango_ml$year)[i]
+  # subset
+  training <- dplyr::select(mango_ml[mango_ml$year != yr, ], -"year")
+  testing <- dplyr::select(mango_ml[mango_ml$year == yr, ], -"year")
+
+  # prepping for analysis
+  training <- training[complete.cases(training) == T, ]
+  testing <- testing[complete.cases(testing) == T, ]
+  training$fl_binary <- factor(as.character(training$fl_binary), levels = c("0", "1"))
+  testing$fl_binary <- factor(as.character(testing$fl_binary), levels = c("0", "1"))
+
+  names(training) <- make.names(names(training))
+  rf_mango <- randomForest::randomForest(fl_binary ~ ., importance = T, data = training)
+
+
+  predictions.rf <- predict(rf_mango, newdata = testing)
+  pred.df <- data.frame(obs = testing[, "fl_binary"], pred = predictions.rf, year = rep(yr, year = length(predictions.rf)))
+
+  preds <- rbind(preds, pred.df)
+
+
+  # vimp_mean<-caret::varImp(rf_mango)
+  vimp_mean <- data.frame(importance(rf_mango, type = 1))
+  vimp <- cbind(vimp, vimp_mean[, 1])
+  colnames(vimp)[ncol(vimp)] <- as.character(yr)
+}
+
+write.csv(vimp, "models/ML/vimp_mango_onset.csv", row.names = F)
+write.csv(preds, "models/ML/preds_mango_onset.csv", row.names = F)
+
+preds <- read.csv("models/ML/preds_mango_onset.csv")
+
+head(preds)
+preds$obs <- factor(preds$fl_binary, levels = c("0", "1"))
+preds$pred <- factor(preds$pred, levels = c("0", "1"))
+confusionMatrix(preds$pred, preds$obs)
+preds$obs.num <- as.numeric(as.character(preds$fl_binary))
+preds$pred.num <- as.numeric(as.character(preds$pred))
+R2_mango <- 1 - (sum((preds$obs.num - preds$pred.num)^2) / sum((preds$obs.num - mean(preds$obs.num))^2))
+
+F1_mango <- f1(pred = preds$pred.num, obs = preds$obs.num)
+
+
+library(dplyr)
+vimp_mango <- read.csv("models/ML/vimp_mango_onset.csv")
+vimp_mango$mean <- rowMeans(vimp_mango[, 2:ncol(vimp_mango)])
+vimp_mango$sd <- apply(vimp_mango[, 2:(ncol(vimp_mango) - 1)], 1, sd)
+vimp_mango$sd_1.6 <- vimp_mango$sd * 1.6
+```
+```{r ml tamarind}
+tam <- start_nomiss %>%
+  filter(Species_name == "Tamarindus indica")
+
+tam_ml <- tam %>%
+  dplyr::select(grep("FN", colnames(tam), value = T), fl_binary, year)
+tam_ml <- tam_ml %>%
+  # dplyr::select(grep("cs", colnames(tam_ml), value=T), fl_binary, year)%>%
+  mutate(
+    mean_temp = scale(FNMean_MeanTemp),
+    min_temp = scale(FNMean_MinTemp),
+    max_temp = scale(FNMean_MaxTemp),
+    solar_rad = scale(FNSum_SolarRad),
+    precip = scale(FNSum_PCP),
+    dry_days = scale(FNSum_ConsDryDays),
+    soil_moisture = scale(FNMean_MeanSM)
+  ) %>%
+  dplyr::select(!grep("FN", colnames(tam_ml), value = T))
+
+
+# loop for LOOCV
+
+preds <- data.frame(NA, NA, NA)
+colnames(preds) <- c("obs", "pred", "year")
+preds <- preds[F, ]
+
+vimp <- data.frame(var = colnames(dplyr::select(tam_ml, -c("fl_binary", "year"))))
+
+for (i in 1:length(unique(tam_ml$year))) {
+  yr <- unique(tam_ml$year)[i]
+  # subset
+  training <- dplyr::select(tam_ml[tam_ml$year != yr, ], -"year")
+  testing <- dplyr::select(tam_ml[tam_ml$year == yr, ], -"year")
+
+  # prepping for analysis
+  training <- training[complete.cases(training) == T, ]
+  testing <- testing[complete.cases(testing) == T, ]
+  training$fl_binary <- factor(as.character(training$fl_binary), levels = c("0", "1"))
+  testing$fl_binary <- factor(as.character(testing$fl_binary), levels = c("0", "1"))
+
+  names(training) <- make.names(names(training))
+  rf_tam <- randomForest::randomForest(fl_binary ~ ., importance = T, data = training)
+
+
+  predictions.rf <- predict(rf_tam, newdata = testing)
+  pred.df <- data.frame(obs = testing[, "fl_binary"], pred = predictions.rf, year = rep(yr, year = length(predictions.rf)))
+
+  preds <- rbind(preds, pred.df)
+
+
+  # vimp_mean<-caret::varImp(rf_tam)
+  vimp_mean <- data.frame(importance(rf_tam, type = 1))
+  vimp <- cbind(vimp, vimp_mean[, 1])
+  colnames(vimp)[ncol(vimp)] <- as.character(yr)
+}
+
+write.csv(vimp, "models/ML/vimp_tam_onset.csv", row.names = F)
+write.csv(preds, "models/ML/preds_tam_onset.csv", row.names = F)
+
+preds <- read.csv("models/ML/preds_tam_onset.csv")
+
+head(preds)
+preds$obs <- factor(preds$fl_binary, levels = c("0", "1"))
+preds$pred <- factor(preds$pred, levels = c("0", "1"))
+confusionMatrix(preds$pred, preds$obs)
+preds$obs.num <- as.numeric(as.character(preds$fl_binary))
+preds$pred.num <- as.numeric(as.character(preds$pred))
+R2_tam <- 1 - (sum((preds$obs.num - preds$pred.num)^2) / sum((preds$obs.num - mean(preds$obs.num))^2))
+
+F1_tam <- f1(pred = preds$pred.num, obs = preds$obs.num)
+
+
+library(dplyr)
+vimp_tam <- read.csv("models/ML/vimp_tam_onset.csv")
+vimp_tam$mean <- rowMeans(vimp_tam[, 2:ncol(vimp_tam)])
+vimp_tam$sd <- apply(vimp_tam[, 2:(ncol(vimp_tam) - 1)], 1, sd)
+vimp_tam$sd_1.6 <- vimp_tam$sd * 1.6
+```
+```{r plots from random forest}
+labs_list <- list(
+  "FNSum_PCP_cs" = "precipitation",
+  "elev_cs" = "elevation",
+  "FNMean_MaxTemp_cs" = "max temperature",
+  "FNMean_MeanSM_cs" = "soil moisture",
+  "FNSum_DryDays_cs" = "dry days",
+  "aspect_cs" = "aspect",
+  "light_cs" = "urbanisation",
+  "User_Tree_id" = "Tree ID",
+  "FNMean_MinTemp_cs" = "minimum temperature",
+  "FNMean_MeanTemp_cs" = "mean temperature",
+  "FNSum_SolarRad_cs" = "solar radiation"
+)
+labs_list2 <- list(
+  "precip" = "precipitation",
+  "max_temp" = "max temperature",
+  "soil_moisture" = "soil moisture",
+  "dry_days" = "dry days",
+  "min_temp" = "minimum temperature",
+  "mean_temp" = "mean temperature",
+  "solar_rad" = "solar radiation"
+)
+library(ggplot2)
+# fmt <- "R^2 == %.3f"
+fmt2 <- "F1 == %.3f"
+lab2 <- sprintf(fmt2, F1_jack)
+vimp_jack_plot <- ggplot(vimp_jack, aes(x = reorder(var, mean), weight = mean)) +
+  geom_bar(fill = "#1e824c") +
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0, size = 1) +
+  geom_errorbar(aes(ymin = mean - sd_1.6, ymax = mean + sd_1.6), width = 0, size = 0.5) +
+  ylab("Variable Importance") +
+  xlab("") +
+  scale_x_discrete(labels = labs_list2) +
+  guides(fill = F) +
+  labs(tag = "a)") +
+  ggtitle("Jackfruit flowering probability") +
+  annotate("text",
+    x = 1, y = 50, label = lab2,
+    parse = TRUE, hjust = 0
+  ) +
+  coord_flip() +
+  theme_bw()
+vimp_jack_plot
+
+lab2 <- sprintf(fmt2, F1_mango)
+vimp_mango_plot <- ggplot(vimp_mango, aes(x = reorder(var, mean), weight = mean)) +
+  geom_bar(fill = "#f7ca18") +
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0, size = 1) +
+  geom_errorbar(aes(ymin = mean - sd_1.6, ymax = mean + sd_1.6), width = 0, size = 0.5) +
+  ylab("Variable Importance") +
+  xlab("") +
+  scale_x_discrete(labels = labs_list2) +
+  guides(fill = F) +
+  labs(tag = "b)") +
+  ggtitle("Mango flowering probability") +
+  annotate("text",
+    x = 1, y = 50, label = lab2,
+    parse = TRUE, hjust = 0
+  ) +
+  coord_flip() +
+  theme_bw()
+vimp_mango_plot
+
+lab2 <- sprintf(fmt2, F1_tam)
+vimp_tam_plot <- ggplot(vimp_tam, aes(x = reorder(var, mean), weight = mean)) +
+  geom_bar(fill = "#a6915c") +
+  geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd), width = 0, size = 1) +
+  geom_errorbar(aes(ymin = mean - sd_1.6, ymax = mean + sd_1.6), width = 0, size = 0.5) +
+  ylab("Variable Importance") +
+  xlab("") +
+  scale_x_discrete(labels = labs_list2) +
+  guides(fill = F) +
+  labs(tag = "c)") +
+  ggtitle("Tamarind flowering probability") +
+  annotate("text",
+    x = 1, y = 50, label = lab2,
+    parse = TRUE, hjust = 0
+  ) +
+  coord_flip() +
+  theme_bw()
+vimp_tam_plot
+
+library(gridExtra)
+png("doc/display/Fig2_onset.png", width = 12, height = 4, units = "in", res = 300)
+grid.arrange(vimp_jack_plot, vimp_mango_plot, vimp_tam_plot, nrow = 1)
+dev.off()

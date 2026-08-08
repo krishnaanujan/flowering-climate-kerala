@@ -1,0 +1,1800 @@
+---
+title: "04_firstobs_analysis"
+author: "Krishna Anujan"
+#date: "2024-04-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r adding env columns}
+library(raster)
+
+msg <- read.csv("data/raw_data/ObsLevel_Sept22.csv")
+msg_coords <- msg
+coordinates(msg_coords) <- ~ long_new2 + lat_new2
+
+dem_stack <- stack("C://Users/krish/Documents/SeasonWatch/MSG/other_data/env_vars/dem_stack")
+lights_KL <- raster("C://Users/krish/Documents/SeasonWatch/MSG/other_data/env_vars/lights_KL")
+dem_vals <- extract(dem_stack, msg_coords)
+light_vals <- extract(lights_KL, msg_coords)
+
+msg <- cbind(msg, dem_vals, light_vals)
+
+sw_2014 <- read.csv("data/modified_data/sw_msg_from2014.csv")
+sw_spat <- msg
+
+sw_spat$Date <- sw_2014$Date2[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$day <- sw_2014$date[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$month <- sw_2014$month[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$year <- sw_2014$year[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$User_Tree_id <- sw_2014$User_Tree_id[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$User_id <- sw_2014$User_id[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$is.KL2 <- sw_2014$is.KL2[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat <- sw_spat[sw_spat$is.KL2 == 1, ]
+```
+
+```{r correlations between variables}
+library(sp)
+library(lubridate)
+library(plyr)
+library(ggplot2)
+library(tidyr)
+library(tidyverse)
+
+
+sw_spat_forcor <- ddply(sw_spat, .(Species_name, User_Tree_id), summarise,
+  lat = mean(lat_new2), long = mean(long_new2),
+  elev = mean(elev), slope = mean(slope),
+  aspect = mean(aspect), light = mean(light_vals),
+  pcp = mean(FNSum_PCP), maxtemp = mean(FNMean_MaxTemp),
+  SM = mean(FNMean_MeanSM), DryDays = mean(FNSum_ConsDryDays),
+  mn_pcp = mean(MNSum_PCP), mn_maxtemp = mean(MNMean_MaxTemp),
+  mn_SM = mean(MNMean_MeanSM), mn_DryDays = mean(MNSum_ConsDryDays),
+  qr_pcp = mean(QrSum_PCP), qr_maxtemp = mean(QrMean_MaxTemp),
+  qr_SM = mean(QrMean_MeanSM), qr_DryDays = mean(QrSum_ConsDryDays)
+)
+
+
+spatcor <- cor(sw_spat_forcor[, 3:8], use = "complete.obs")
+
+
+sw_fn_cor <- ddply(sw_spat, .(Grid_ID, month), summarise,
+  fn_pcp = mean(FNSum_PCP), fn_maxtemp = mean(FNMean_MaxTemp),
+  fn_SM = mean(FNMean_MeanSM), fn_DryDays = mean(FNSum_ConsDryDays),
+  mn_pcp = mean(MNSum_PCP), mn_maxtemp = mean(MNMean_MaxTemp),
+  mn_SM = mean(MNMean_MeanSM), mn_DryDays = mean(MNSum_ConsDryDays),
+  qr_pcp = mean(QrSum_PCP), qr_maxtemp = mean(QrMean_MaxTemp),
+  qr_SM = mean(QrMean_MeanSM), qr_DryDays = mean(QrSum_ConsDryDays)
+)
+
+fn_cor <- cor(sw_fn_cor[, 3:14])
+
+
+# scale everything
+# https://stackoverflow.com/questions/41766181/correct-way-to-scale-for-multilevel-regression-using-lmer-r
+
+sw_spat_rescale <- transform(sw_spat,
+  FNSum_PCP_cs = scale(FNSum_PCP),
+  FNMean_MaxTemp_cs = scale(FNMean_MaxTemp),
+  FNMean_MeanSM_cs = scale(FNMean_MeanSM),
+  FNSum_DryDays_cs = scale(FNSum_ConsDryDays),
+  MNSum_PCP_cs = scale(MNSum_PCP),
+  FNMean_MinTemp_cs = scale(FNMean_MinTemp),
+  FNMean_MeanTemp_cs = scale(FNMean_MeanTemp),
+  FNSum_SolarRad_cs = scale(FNSum_SolarRad),
+  MNMean_MaxTemp_cs = scale(MNMean_MaxTemp),
+  MNMean_MeanSM_cs = scale(MNMean_MeanSM),
+  MNSum_DryDays_cs = scale(MNSum_ConsDryDays),
+  QrSum_PCP_cs = scale(QrSum_PCP),
+  QrMean_MaxTemp_cs = scale(QrMean_MaxTemp),
+  QrMean_MeanSM_cs = scale(QrMean_MeanSM),
+  QrSum_DryDays_cs = scale(QrSum_ConsDryDays),
+  elev_cs = scale(elev), slope_cs = scale(slope),
+  light_cs = scale(light_vals), aspect_cs = scale(aspect),
+  lat_sc = scale(lat_new2), long_sc = scale(long_new2)
+)
+
+
+spat_cs_cor <- cor(sw_spat_rescale[, 54:59], use = "complete.obs")
+ggcorrplot::ggcorrplot(spat_cs_cor, lab = T, type = "lower")
+
+# make the response variable a factor
+sw_spat_rescale$fl_intensity_fac <- factor(sw_spat_rescale$fl_intensity, levels = c("0", "1", "2"))
+sw_spat_rescale$fr_intensity_fac <- factor(sw_spat_rescale$fr_intensity, levels = c("0", "1", "2"))
+```
+
+```{r three species and first observations}
+# jack-----------------------------------
+jack <- sw_spat[sw_spat$Species_name == "Artocarpus heterophyllus" & sw_spat$is.KL2 == 1, ]
+
+# mango------------------------------------
+mango <- sw_spat[sw_spat$Species_name == "Mangifera indica" & sw_spat$is.KL2 == 1, ]
+
+# tamarind----------------------
+tam <- sw_spat[sw_spat$Species_name == "Tamarindus indica" & sw_spat$is.KL2 == 1, ]
+
+colnames(jack)
+
+library(tidyverse)
+
+sw_spat <- sw_spat %>%
+  filter(is.KL2 == 1) %>%
+  group_by(Species_name, User_Tree_id) %>%
+  arrange(Date) %>%
+  dplyr::mutate(
+    fl_binary_prev = dplyr::lag(fl_binary, n = 1, default = NA, order_by = User_Tree_id),
+    fl_intensity_prev = dplyr::lag(fl_intensity, n = 1, default = NA, order_by = User_Tree_id),
+    fr_binary_prev = dplyr::lag(fr_binary, n = 1, default = NA, order_by = User_Tree_id),
+    fr_intensity_prev = dplyr::lag(fr_intensity, n = 1, default = NA, order_by = User_Tree_id),
+    diffdays = -as.numeric(difftime(dplyr::lag(Date, n = 1, default = NA, order_by = User_Tree_id), Date, units = "days"))
+  ) %>%
+  group_by(Species_name) %>%
+  dplyr::mutate(
+    mean_temp = as.vector(scale(FNMean_MeanTemp)),
+    min_temp = as.vector(scale(FNMean_MinTemp)),
+    max_temp = as.vector(scale(FNMean_MaxTemp)),
+    solar_rad = as.vector(scale(FNSum_SolarRad)),
+    precip = as.vector(scale(FNSum_PCP)),
+    dry_days = as.vector(scale(FNSum_ConsDryDays)),
+    soil_moisture = as.vector(scale(FNMean_MeanSM)),
+    elev_cs = as.vector(scale(elev)),
+    lights_cs = as.vector(scale(light_vals)),
+    slope_cs = as.vector(scale(slope)),
+    aspect_cs = as.vector((aspect))
+  ) %>%
+  ungroup()
+
+saveRDS(sw_spat, "data/modified_data/sw_spat.RDS")
+
+sw_spat <- readRDS("data/modified_data/sw_spat.RDS")
+
+start_nomiss <- sw_spat %>%
+  filter(diffdays == 7) %>%
+  filter(fl_binary_prev == 0) %>%
+  group_by(Species_name) %>%
+  mutate(
+    mean_temp = as.vector(scale(FNMean_MeanTemp)),
+    min_temp = as.vector(scale(FNMean_MinTemp)),
+    max_temp = as.vector(scale(FNMean_MaxTemp)),
+    solar_rad = as.vector(scale(FNSum_SolarRad)),
+    precip = as.vector(scale(FNSum_PCP)),
+    dry_days = as.vector(scale(FNSum_ConsDryDays)),
+    soil_moisture = as.vector(scale(FNMean_MeanSM)),
+    elev_cs = as.vector(scale(elev)),
+    lights_cs = as.vector(scale(light_vals)),
+    slope_cs = as.vector(scale(slope)),
+    aspect_cs = as.vector(scale(aspect))
+  ) %>%
+  ungroup()
+
+saveRDS(start_nomiss, "data/modified_data/start_nomiss.RDS")
+```
+```{r output data distribution table}
+library(sjmisc)
+
+start_nomiss <- readRDS("data/modified_data/start_nomiss.RDS")
+sw_spat <- readRDS("data/modified_data/sw_spat.RDS")
+
+sp_data <- sw_spat %>%
+  group_by(Species_name) %>%
+  summarise(
+    n.obs.tot = length(Species_name),
+    n.tree.tot = length(unique(User_Tree_id)),
+    n.tree.single = sum(table(User_Tree_id) == 1),
+    n.obs.prev0 = sum(diffdays == 7 & fl_binary_prev == 0, na.rm = T),
+    n.tree.prev0 = length(unique(User_Tree_id[which(diffdays == 7 & fl_binary_prev == 0)]))
+  ) %>%
+  rotate_df(cn = T)
+
+sp_data$var <- c(
+  "Total number of observations",
+  "Total number of trees",
+  "Number of trees with single observations",
+  "Number of observations with no flowering at t-1",
+  "Number of trees in observations with no flowering at t-1"
+)
+
+sp_data <- sp_data[, c(4, 1:3)]
+write.csv(sp_data, "doc/display/sp_data.csv", row.names = F)
+
+
+sp_data_by_yr <- sw_spat %>%
+  mutate(year = as.integer(year)) %>%
+  group_by(year, Species_name) %>%
+  summarise(
+    n.obs = length(Species_name),
+    n.tree.tot = length(unique(User_Tree_id)),
+    n.tree.single = sum(table(User_Tree_id) == 1),
+    n.obs.prev0 = sum(diffdays == 7 & fl_binary_prev == 0, na.rm = T),
+    n.tree.prev0 = length(unique(User_Tree_id[which(diffdays == 7 & fl_binary_prev == 0)]))
+  )
+
+
+obs_yr <- ggplot(sp_data_by_yr, aes(x = year, y = n.obs, group_by = Species_name, fill = Species_name)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  ylab("Number of observations") +
+  # show all x-axis ticks
+  scale_x_continuous(breaks = seq(min(sp_data_by_yr$year), max(sp_data_by_yr$year), 1)) +
+  scale_fill_manual(values = c("#1e824c", "#f7ca18", "#a6915c")) +
+  theme_bw() +
+  guides(fill = "none") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+trees_yr <- ggplot(sp_data_by_yr, aes(x = year, y = n.tree.tot, group_by = Species_name, fill = Species_name)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  ylab("Number of trees") +
+  scale_fill_manual(values = c("#1e824c", "#f7ca18", "#a6915c")) +
+  theme_bw() +
+  # show all x-axis ticks
+  scale_x_continuous(breaks = seq(min(sp_data_by_yr$year), max(sp_data_by_yr$year), 1)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+library(gridExtra)
+png("doc/display/obs_trees_yr.png", width = 8, height = 4, units = "in", res = 300)
+grid.arrange(obs_yr, trees_yr, widths = c(1, 1.6), nrow = 1)
+dev.off()
+
+obs_yr0 <- ggplot(sp_data_by_yr, aes(x = year, y = n.obs.prev0, group_by = Species_name, fill = Species_name)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  ylab("Number of observations with previous 0") +
+  scale_fill_manual(values = c("#1e824c", "#f7ca18", "#a6915c")) +
+  theme_bw() +
+  guides(fill = "none") +
+  # show all x-axis ticks
+  scale_x_continuous(breaks = seq(min(sp_data_by_yr$year), max(sp_data_by_yr$year), 1)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+trees_yr0 <- ggplot(sp_data_by_yr, aes(x = year, y = n.tree.prev0, group_by = Species_name, fill = Species_name)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  ylab("Number of trees") +
+  scale_fill_manual(values = c("#1e824c", "#f7ca18", "#a6915c")) +
+  theme_bw() +
+  # show all x-axis ticks
+  scale_x_continuous(breaks = seq(min(sp_data_by_yr$year), max(sp_data_by_yr$year), 1)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+png("doc/display/obs_trees0_yr.png", width = 8, height = 4, units = "in", res = 300)
+grid.arrange(obs_yr0, trees_yr0, widths = c(1, 1.6), nrow = 1)
+dev.off()
+
+# observation data by fortnight
+head(sw_spat)
+
+sw_spat_by_week <- sw_spat %>%
+  mutate(week = week(Date)) %>%
+  group_by(year, week, Species_name) %>%
+  summarise(
+    n.obs = length(Species_name),
+    n.tree.tot = length(unique(User_Tree_id)),
+    n.tree.single = sum(table(User_Tree_id) == 1),
+    n.obs.prev0 = sum(diffdays == 7 & fl_binary_prev == 0, na.rm = T),
+    n.tree.prev0 = length(unique(User_Tree_id[which(diffdays == 7 & fl_binary_prev == 0)]))
+  )
+
+# boxplot over weeks
+library(ggplot2)
+
+obs_week <- ggplot(sw_spat_by_week, aes(x = factor(week), y = n.obs, fill = Species_name)) +
+  geom_boxplot() +
+  ylab("Number of observations") +
+  facet_wrap(~Species_name) +
+  # show all x-axis ticks
+  # scale_x_continuous(breaks = seq(min(sw_spat_by_week$week, na.rm = T), max(sw_spat_by_week$week, na.rm = T), 1)) +
+  scale_fill_manual(values = c("#1e824c", "#f7ca18", "#a6915c")) +
+  theme_minimal() +
+  guides(fill = "none") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+png("doc/display/obs_week_yr.png", width = 8, height = 4, units = "in", res = 300)
+obs_week
+dev.off()
+```
+
+```{r binary flowering}
+sw_spat <- readRDS("data/modified_data/sw_spat.RDS")
+start_nomiss <- readRDS("data/modified_data/start_nomiss.RDS")
+
+library(tidyverse)
+jack_start <- start_nomiss %>%
+  filter(Species_name == "Artocarpus heterophyllus")
+mango_start <- start_nomiss %>%
+  filter(Species_name == "Mangifera indica")
+tam_start <- start_nomiss %>%
+  filter(Species_name == "Tamarindus indica")
+
+
+# remove
+# elev*temp
+# aspect*solar_rad
+# urban*temp
+# urban*soil_moisture
+
+library(lme4)
+
+# jack
+jack_bin_start <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    #  elev_cs*min_temp+
+    elev_cs * soil_moisture +
+    elev_cs * solar_rad +
+    aspect_cs * min_temp +
+    aspect_cs * soil_moisture +
+    # aspect_cs*solar_rad+
+    # light_cs*min_temp+
+    #   light_cs*soil_moisture+
+    lights_cs * solar_rad +
+    (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+  family = binomial, data = jack_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(jack_bin_start, "models/onset_models/jack_full.RDS")
+
+# pixelID spatial autocorrelation
+# elevation, aspect, slope and light
+# precipation, max temp, mean SM, dry days and solar radiation
+# 20 combinations
+#
+
+
+# mango
+mango_bin_start <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    #  elev_cs*min_temp+
+    elev_cs * soil_moisture +
+    elev_cs * solar_rad +
+    aspect_cs * min_temp +
+    aspect_cs * soil_moisture +
+    # aspect_cs*solar_rad+
+    # light_cs*min_temp+
+    #   light_cs*soil_moisture+
+    lights_cs * solar_rad +
+    (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+  family = binomial, data = mango_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+saveRDS(mango_bin_start, "models/onset_models/mango_full.RDS")
+
+
+# tamarind
+tam_bin_start <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    #  elev_cs*min_temp+
+    elev_cs * soil_moisture +
+    elev_cs * solar_rad +
+    aspect_cs * min_temp +
+    aspect_cs * soil_moisture +
+    # aspect_cs*solar_rad+
+    # light_cs*min_temp+
+    #   light_cs*soil_moisture+
+    lights_cs * solar_rad +
+    (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+  family = binomial, data = tam_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(tam_bin_start, "models/onset_models/tam_full.RDS")
+```
+
+```{r plots}
+jack_bin_start <- readRDS("models/onset_models/jack_full.RDS")
+mango_bin_start <- readRDS("models/onset_models/mango_full.RDS")
+tam_bin_start <- readRDS("models/onset_models/tam_full.RDS")
+
+library(broom.mixed)
+library(ggplot2)
+jack_fe <- tidy(jack_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "fixed")
+jack_re <- tidy(jack_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_pars")
+jack_re_all <- tidy(jack_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_coefs")
+jack_fe$sig <- ifelse(jack_fe$p.value < 0.05, ifelse(jack_fe$p.value < 0.01, "yy", "y"), "n")
+
+newlabs <- c(
+  "(Intercept)", "minimum temperature",
+  "soil moisture",
+  "solar radiation",
+  "elevation", "aspect", "urbanisation",
+  "soil moisture:elevation",
+  "solar radiation:elevation",
+  "min temp:aspect", "soil moisture:aspect",
+  "solar radiation:urban"
+)
+
+jack_fe$newlabs <- factor(newlabs, levels = newlabs)
+`%nin%` <- Negate(`%in%`)
+
+jack_glmer_plot <- ggplot(jack_fe[jack_fe$term %nin% c("elev_cs", "aspect_cs", "lights_cs"), ], aes(y = estimate, x = newlabs, color = factor(sig, levels = c("n", "y", "yy")))) +
+  geom_hline(yintercept = 1, col = "grey", linewidth = 1.5) +
+  geom_point(aes(color = sig), pch = 16, position = position_dodge(width = 0.5), size = 2) +
+  scale_color_manual(values = c("grey", "#1e824c", "#1e824c")) +
+  geom_linerange(aes(x = newlabs, ymin = conf.low, ymax = conf.high, color = sig), position = position_dodge(width = 0.5), linewidth = 1) +
+  ggtitle("onset of jackfruit flowering") +
+  xlab("predictors") +
+  ylab("model coefficient") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal() +
+  guides(shape = "none", color = "none") +
+  labs(tag = "a)") +
+  theme(axis.text.y = element_text(size = 12))
+jack_glmer_plot
+
+# mango
+mango_fe <- tidy(mango_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "fixed")
+mango_re <- tidy(mango_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_pars")
+mango_fe$sig <- ifelse(mango_fe$p.value < 0.05, ifelse(mango_fe$p.value < 0.01, "yy", "y"), "n")
+
+mango_fe$newlabs <- factor(newlabs, levels = newlabs)
+
+mango_glmer_plot <- ggplot(mango_fe[mango_fe$term %nin% c("elev_cs", "aspect_cs", "lights_cs"), ], aes(y = estimate, x = newlabs, color = factor(sig, levels = c("n", "y", "yy")))) +
+  geom_hline(yintercept = 1, col = "grey", linewidth = 1.5) +
+  geom_point(aes(color = sig), pch = 16, position = position_dodge(width = 0.5), size = 2) +
+  scale_color_manual(values = c("grey", "#f7ca18", "#f7ca18")) +
+  geom_linerange(aes(x = newlabs, ymin = conf.low, ymax = conf.high, color = sig), position = position_dodge(width = 0.5), linewidth = 1) +
+  ggtitle("onset of mango flowering") +
+  xlab("predictors") +
+  ylab("model coefficient") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal() +
+  guides(shape = FALSE, color = FALSE) +
+  labs(tag = "b)") +
+  theme(axis.text.y = element_text(size = 12))
+mango_glmer_plot
+
+# tam
+tam_fe <- tidy(tam_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "fixed")
+tam_re <- tidy(tam_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_pars")
+tam_fe$sig <- ifelse(tam_fe$p.value < 0.05, ifelse(tam_fe$p.value < 0.01, "yy", "y"), "n")
+
+tam_fe$newlabs <- factor(newlabs, levels = newlabs)
+
+tam_glmer_plot <- ggplot(tam_fe[tam_fe$term %nin% c("elev_cs", "aspect_cs", "lights_cs"), ], aes(y = estimate, x = newlabs, color = factor(sig, levels = c("n", "y", "yy")))) +
+  geom_hline(yintercept = 1, col = "grey", linewidth = 1.5) +
+  geom_point(aes(color = sig), pch = 16, position = position_dodge(width = 0.5), size = 2) +
+  scale_color_manual(values = c("grey", "#a6915c", "#a6915c")) +
+  geom_linerange(aes(x = newlabs, ymin = conf.low, ymax = conf.high, color = sig), position = position_dodge(width = 0.5), linewidth = 1) +
+  ggtitle("onset of tamarind flowering") +
+  xlab("predictors") +
+  ylab("model coefficient") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal() +
+  guides(shape = FALSE, color = FALSE) +
+  labs(tag = "c)") +
+  theme(axis.text.y = element_text(size = 12))
+tam_glmer_plot
+
+library(gridExtra)
+png("doc/display/Fig3.png", width = 15, height = 6, units = "in", res = 300)
+grid.arrange(jack_glmer_plot, mango_glmer_plot, tam_glmer_plot, ncol = 3)
+dev.off()
+```
+
+```{r preds}
+library(ggplot2)
+library(sjPlot)
+jp1 <- plot_model(jack_bin_start, type = "pred", terms = "min_temp[all]", show.data = T, col = "#1e824c", alpha = 0.2) +
+  xlab("minimum temperature") + ylab("probability") +
+  theme_minimal() +
+  # scale_color_manual(values = "#1e824c")+
+  ggtitle("probability of flowering onset in jackfruit")
+jp2 <- plot_model(jack_bin_start, type = "pred", terms = "soil_moisture[all]", show.data = T, col = "#1e824c") +
+  xlab("soil_moisture") + ylab("probability") +
+  theme_minimal() +
+  ggtitle("probability of flowering onset in jackfruit")
+jp3 <- plot_model(jack_bin_start, type = "pred", terms = "solar_rad[all]", show.data = T, col = "#1e824c") + xlab("solar radiation") + ylab("probability") +
+  theme_minimal() +
+  ggtitle("probability of flowering onset in jackfruit")
+
+mp1 <- plot_model(mango_bin_start, type = "pred", terms = "min_temp[all]", show.data = T, col = "#f7ca18") + xlab("minimum temperature") + ylab("probability") +
+  theme_minimal() +
+  ggtitle("probability of flowering onset in mango")
+mp2 <- plot_model(mango_bin_start, type = "pred", terms = "soil_moisture[all]", show.data = T, col = "#f7ca18") + xlab("soil moisture") + ylab("probability") +
+  theme_minimal() +
+  ggtitle("probability of flowering onset in mango")
+mp3 <- plot_model(mango_bin_start, type = "pred", terms = "solar_rad[all]", show.data = T, col = "#f7ca18") +
+  xlab("solar radiation") + ylab("probability") +
+  theme_minimal() +
+  ggtitle("probability of flowering onset in mango")
+
+tp1 <- plot_model(tam_bin_start, type = "pred", terms = "min_temp[all]", show.data = T, col = "#a6915c") + xlab("minimum temperature") + ylab("probability") +
+  theme_minimal() +
+  ggtitle("probability of flowering onset in tamarind")
+tp2 <- plot_model(tam_bin_start, type = "pred", terms = "soil_moisture[all]", show.data = T, col = "grey") + xlab("soil moisture") + ylab("probability") +
+  theme_minimal() +
+  ggtitle("probability of flowering onset in tamarind")
+tp3 <- plot_model(tam_bin_start, type = "pred", terms = "solar_rad[all]", show.data = T, col = "grey") + xlab("solar radiation") + ylab("probability") +
+  theme_minimal() +
+  ggtitle("probability of flowering onset in tamarind")
+
+library(gridExtra)
+png("doc/display/Fig3_alt.png", width = 15, height = 12, units = "in", res = 300)
+grid.arrange(jack_glmer_plot, jp1, jp2, jp3,
+  mango_glmer_plot, mp1, mp2, mp3,
+  tam_glmer_plot, tp1, tp2, tp3,
+  nrow = 3
+)
+dev.off()
+```
+
+```{r interactions}
+library(sjPlot)
+library(sjmisc)
+
+jp1 <- plot_model(jack_bin_start,
+  type = "pred", terms = c("soil_moisture[all]", "elev_cs[-1, 0, 1]"), show.data = T,
+  # col="#1e824c",
+  # col=c("red", "black", "blue"),
+  col = c("grey40", "grey20", "grey10"),
+  alpha = 0.2
+) +
+  xlab("soil moisture") + ylab("probability") +
+  theme_minimal() +
+  labs(tag = "a)") +
+  guides(col = guide_legend(title = "elevation")) +
+  # scale_color_manual(values = c("red", "black", "blue"))+
+  ggtitle("flowering onset in jackfruit")
+
+jp2 <- plot_model(jack_bin_start,
+  type = "pred", terms = c("solar_rad[all]", "elev_cs[-1, 0, 1]"), show.data = T,
+  # col="#1e824c",
+  col = c("red", "black", "blue"),
+  alpha = 0.2
+) +
+  xlab("solar radiation") + ylab("probability") +
+  guides(col = guide_legend(title = "elevation")) +
+  labs(tag = "d)") +
+  theme_minimal() +
+  # scale_color_manual(values = c("red", "black", "blue"))+
+  ggtitle("flowering onset in jackfruit")
+
+jp3 <- plot_model(jack_bin_start,
+  type = "pred", terms = c("min_temp[all]", "aspect_cs[-1, 0, 1]"), show.data = T,
+  # col="#1e824c",
+  col = c("grey40", "grey20", "grey10"),
+  #                col=c("red", "black", "blue"),
+  alpha = 0.2
+) +
+  xlab("minimum temperature") + ylab("probability") +
+  labs(tag = "g)") +
+  theme_minimal() +
+  guides(col = guide_legend(title = "aspect")) +
+  ggtitle("flowering onset in jackfruit")
+
+jp4 <- plot_model(jack_bin_start,
+  type = "pred", terms = c("soil_moisture[all]", "aspect_cs[-1, 0, 1]"), show.data = T,
+  # col="#1e824c",
+  col = c("grey40", "grey20", "grey10"),
+  #                col=c("red", "black", "blue"),
+  alpha = 0.2
+) +
+  xlab("soil moisture") + ylab("probability") +
+  labs(tag = "j)") +
+  theme_minimal() +
+  guides(col = guide_legend(title = "aspect")) +
+  ggtitle("flowering onset in jackfruit")
+
+jp5 <- plot_model(jack_bin_start,
+  type = "pred", terms = c("solar_rad[all]", "lights_cs[-1, 0, 1]"), show.data = T,
+  # col="#1e824c",
+  col = c("grey40", "grey20", "grey10"),
+  #                col=c("red", "black", "blue"),
+  alpha = 0.2
+) +
+  xlab("solar radiation") + ylab("probability") +
+  labs(tag = "m)") +
+  theme_minimal() +
+  guides(col = guide_legend(title = "urban")) +
+  ggtitle("flowering onset in jackfruit")
+
+
+# mango--------------
+mp1 <- plot_model(mango_bin_start,
+  type = "pred", terms = c("soil_moisture[all]", "elev_cs[-1, 0, 1]"), show.data = T,
+  # col="#1e824c",
+  col = c("red", "black", "blue"),
+  alpha = 0.2
+) +
+  xlab("soil moisture") + ylab("probability") +
+  theme_minimal() +
+  labs(tag = "b)") +
+  guides(col = guide_legend(title = "elevation")) +
+  ggtitle("flowering onset in mango")
+
+mp2 <- plot_model(mango_bin_start,
+  type = "pred", terms = c("solar_rad[all]", "elev_cs[-1, 0, 1]"), show.data = T,
+  # col="#1e824c",
+  col = c("grey40", "grey20", "grey10"),
+  #                col=c("red", "black", "blue"),
+  alpha = 0.2
+) +
+  xlab("solar radiation") + ylab("probability") +
+  labs(tag = "e)") +
+  theme_minimal() +
+  guides(col = guide_legend(title = "elevation")) +
+  ggtitle("flowering onset in mango")
+
+mp3 <- plot_model(mango_bin_start,
+  type = "pred", terms = c("min_temp[all]", "aspect_cs[-1, 0, 1]"), show.data = T,
+  # col="#1e824c",
+  col = c("red", "black", "blue"),
+  alpha = 0.2
+) +
+  xlab("minimum temperature") + ylab("probability") +
+  theme_minimal() +
+  labs(tag = "h)") +
+  guides(col = guide_legend(title = "aspect")) +
+  ggtitle("flowering onset in mango")
+
+mp4 <- plot_model(mango_bin_start,
+  type = "pred", terms = c("soil_moisture[all]", "aspect_cs[-1, 0, 1]"), show.data = T,
+  # col="#1e824c",
+  col = c("grey40", "grey20", "grey10"),
+  #                col=c("red", "black", "blue"),
+  alpha = 0.2
+) +
+  xlab("soil moisture") + ylab("probability") +
+  theme_minimal() +
+  labs(tag = "k)") +
+  guides(col = guide_legend(title = "aspect")) +
+  ggtitle("flowering onset in mango")
+
+mp5 <- plot_model(mango_bin_start,
+  type = "pred", terms = c("solar_rad[all]", "lights_cs[-1, 0, 1]"), show.data = T,
+  # col="#1e824c",
+  col = c("red", "black", "blue"),
+  alpha = 0.2
+) +
+  xlab("solar radiation") + ylab("probability") +
+  labs(tag = "n)") +
+  theme_minimal() +
+  guides(col = guide_legend(title = "urban")) +
+  ggtitle("flowering onset in mango")
+
+# tamarind--------------------
+library(ggeffects)
+library(scales)
+tp1 <- ggplot(tam_start, aes(x = soil_moisture, y = fl_binary)) +
+  geom_point(alpha = 0.2, cex = 3) +
+  xlab("soil moisture") +
+  ylab("probability") +
+  ggtitle("flowering onset in tamarind") +
+  labs(tag = "c)") +
+  theme_minimal() +
+  scale_y_continuous(labels = percent)
+
+tp2 <- ggplot(tam_start, aes(x = solar_rad, y = fl_binary)) +
+  geom_point(alpha = 0.2, cex = 3) +
+  xlab("solar radiation") +
+  ylab("probability") +
+  ggtitle("flowering onset in tamarind") +
+  labs(tag = "f)") +
+  theme_minimal() +
+  scale_y_continuous(labels = percent)
+
+
+tp3 <- plot_model(tam_bin_start,
+  type = "pred", terms = c("min_temp[all]", "aspect_cs[-1, 0, 1]"), show.data = T,
+  # col="#1e824c",
+  col = c("grey40", "grey20", "grey10"),
+  #                col=c("red", "black", "blue"),
+  alpha = 0.2
+) +
+  xlab("minimum temperature") + ylab("probability") +
+  theme_minimal() +
+  labs(tag = "i)") +
+  guides(col = guide_legend(title = "aspect")) +
+  ggtitle("flowering onset in tamarind")
+
+tp4 <- ggplot(tam_start, aes(x = soil_moisture, y = fl_binary)) +
+  geom_point(alpha = 0.2, cex = 3) +
+  xlab("soil moisture") +
+  ylab("probability") +
+  ggtitle("flowering onset in tamarind") +
+  labs(tag = "l)") +
+  theme_minimal() +
+  scale_y_continuous(labels = percent)
+
+tp5 <- ggplot(tam_start, aes(x = solar_rad, y = fl_binary)) +
+  geom_point(alpha = 0.2, cex = 3) +
+  xlab("solar radiation") +
+  ylab("probability") +
+  ggtitle("flowering onset in tamarind") +
+  labs(tag = "o)") +
+  theme_minimal() +
+  scale_y_continuous(labels = percent)
+
+
+
+layout_mat <- cbind(
+  1:5,
+  6:10,
+  11:15
+)
+gs <- list(
+  jp1, jp2, jp3, jp4, jp5,
+  mp1, mp2, mp3, mp4, mp5,
+  tp1, tp2, tp3, tp4, tp5
+)
+
+library(gridExtra)
+png("doc/display/Fig4.png", width = 12, height = 15, units = "in", res = 300)
+grid.arrange(
+  grobs = gs,
+  layout_matrix = layout_mat
+)
+dev.off()
+```
+
+```{r model diagnostics}
+library(lme4)
+library(performance)
+
+png("doc/display/jack_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(jack_bin_start)
+dev.off()
+
+png("doc/display/mango_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(mango_bin_start)
+dev.off()
+
+png("doc/display/tam_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(tam_bin_start)
+dev.off()
+```
+```{r LOOCV}
+year <- 2014:2022
+
+jmse <- mmse <- tmse <- data.frame(year = year, mse = NA, cor = NA)
+jests <- mests <- tests <- data.frame(var = c("(Intercept)", "min_temp", "soil_moisture", "solar_rad", "elev_cs", "aspect_cs", "lights_cs", "soil_moisture:elev_cs", "solar_rad:elev_cs", "min_temp:aspect_cs", "soil_moisture:aspect_cs", "solar_rad:lights_cs"))
+jpreds <- mpreds <- tpreds <- data.frame(NA, NA, NA)
+colnames(jpreds) <- colnames(mpreds) <- colnames(tpreds) <- c("obs", "pred", "year")
+jpreds <- jpreds[F, ]
+mpreds <- mpreds[F, ]
+tpreds <- tpreds[F, ]
+
+
+for (i in 1:length(year)) {
+  yr <- year[i]
+
+  # jack-----
+  jtrain <- jack_start[jack_start$year != yr, ]
+  jtest <- jack_start[jack_start$year == yr, ]
+
+  jyr_mod <- glmer(
+    fl_binary ~ min_temp +
+      soil_moisture +
+      solar_rad +
+      #  elev_cs*min_temp+
+      elev_cs * soil_moisture +
+      elev_cs * solar_rad +
+      aspect_cs * min_temp +
+      aspect_cs * soil_moisture +
+      # aspect_cs*solar_rad+
+      # light_cs*min_temp+
+      #   light_cs*soil_moisture+
+      lights_cs * solar_rad +
+      (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+    family = binomial, data = jtrain,
+    glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+
+  jpred <- plogis(predict(jyr_mod, newdata = jtest, allow.new.levels = T))
+  jests <- cbind(jests, coef(summary(jyr_mod))[, 1])
+  jests <- cbind(jests, coef(summary(jyr_mod))[, 2])
+  jmse[i, 2] <- mean((jtest$fl_binary - jpred)^2, na.rm = T)
+  jmse[i, 3] <- cor(jtest$fl_binary, jpred, use = "complete.obs")
+
+  pred.df <- data.frame(obs = jtest[, "fl_binary"], pred = jpred, year = rep(yr, year = length(jpred)))
+  jpreds <- rbind(jpreds, pred.df)
+
+
+  saveRDS(jyr_mod, paste0("models/onset_models/jack_", yr, ".RDS"))
+
+  # mango
+  mtrain <- mango_start[mango_start$year != yr, ]
+  mtest <- mango_start[mango_start$year == yr, ]
+
+  myr_mod <- glmer(
+    fl_binary ~ min_temp +
+      soil_moisture +
+      solar_rad +
+      #  elev_cs*min_temp+
+      elev_cs * soil_moisture +
+      elev_cs * solar_rad +
+      aspect_cs * min_temp +
+      aspect_cs * soil_moisture +
+      # aspect_cs*solar_rad+
+      # light_cs*min_temp+
+      #   light_cs*soil_moisture+
+      lights_cs * solar_rad +
+      (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+    family = binomial, data = mtrain,
+    glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+
+  mpred <- plogis(predict(myr_mod, newdata = mtest, allow.new.levels = T))
+  mests <- cbind(mests, coef(summary(myr_mod))[, 1])
+  mests <- cbind(mests, coef(summary(myr_mod))[, 2])
+  mmse[i, 2] <- mean((mtest$fl_binary - mpred)^2, na.rm = T)
+  mmse[i, 3] <- cor(mtest$fl_binary, mpred, use = "complete.obs")
+
+  pred.df <- data.frame(obs = mtest[, "fl_binary"], pred = mpred, year = rep(yr, year = length(mpred)))
+  mpreds <- rbind(mpreds, pred.df)
+
+
+  saveRDS(myr_mod, paste0("models/onset_models/mango_", yr, ".RDS"))
+
+  # tam-----
+  ttrain <- tam_start[tam_start$year != yr, ]
+  ttest <- tam_start[tam_start$year == yr, ]
+
+  tyr_mod <- glmer(
+    fl_binary ~ min_temp +
+      soil_moisture +
+      solar_rad +
+      #  elev_cs*min_temp+
+      elev_cs * soil_moisture +
+      elev_cs * solar_rad +
+      aspect_cs * min_temp +
+      aspect_cs * soil_moisture +
+      # aspect_cs*solar_rad+
+      # light_cs*min_temp+
+      #   light_cs*soil_moisture+
+      lights_cs * solar_rad +
+      (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+    family = binomial, data = ttrain,
+    glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+
+  tpred <- plogis(predict(tyr_mod, newdata = ttest, allow.new.levels = T))
+  tests <- cbind(tests, coef(summary(tyr_mod))[, 1])
+  tests <- cbind(tests, coef(summary(tyr_mod))[, 2])
+  tmse[i, 2] <- mean((ttest$fl_binary - tpred)^2, na.rm = T)
+  tmse[i, 3] <- cor(ttest$fl_binary, tpred, use = "complete.obs")
+
+  pred.df <- data.frame(obs = ttest[, "fl_binary"], pred = tpred, year = rep(yr, year = length(tpred)))
+  tpreds <- rbind(tpreds, pred.df)
+
+
+  saveRDS(tyr_mod, paste0("models/onset_models/tam_", yr, ".RDS"))
+}
+
+
+# mse
+write.csv(jmse, "models/onset_models/jack_loocv_mse.csv", row.names = F)
+write.csv(mmse, "models/onset_models/mango_loocv_mse.csv", row.names = F)
+write.csv(tmse, "models/onset_models/tam_loocv_mse.csv", row.names = F)
+
+# ests
+colnames(jests)[seq(2, (ncol(jests) - 1), by = 2)] <- paste0("ests_", year)
+colnames(jests)[seq(3, ncol(jests), by = 2)] <- paste0("std_er_", year)
+colnames(mests)[seq(2, (ncol(mests) - 1), by = 2)] <- paste0("ests_", year)
+colnames(mests)[seq(3, ncol(mests), by = 2)] <- paste0("std_er_", year)
+colnames(tests)[seq(2, (ncol(tests) - 1), by = 2)] <- paste0("ests_", year)
+colnames(tests)[seq(3, ncol(tests), by = 2)] <- paste0("std_er_", year)
+
+write.csv(jests, "models/onset_models/jack_loocv_ests.csv", row.names = F)
+write.csv(mests, "models/onset_models/mango_loocv_ests.csv", row.names = F)
+write.csv(tests, "models/onset_models/tam_loocv_ests.csv", row.names = F)
+
+# preds
+
+jpreds$pred.bin <- ifelse(jpreds$pred >= 0.5, 1, 0)
+mpreds$pred.bin <- ifelse(mpreds$pred >= 0.5, 1, 0)
+tpreds$pred.bin <- ifelse(tpreds$pred >= 0.5, 1, 0)
+write.csv(jpreds, "models/onset_models/jack_loocv_preds.csv", row.names = F)
+write.csv(mpreds, "models/onset_models/mango_loocv_preds.csv", row.names = F)
+write.csv(tpreds, "models/onset_models/tam_loocv_preds.csv", row.names = F)
+```
+
+```{r f1}
+jpreds <- read.csv("models/onset_models/jack_loocv_preds.csv")
+mpreds <- read.csv("models/onset_models/mango_loocv_preds.csv")
+tpreds <- read.csv("models/onset_models/tam_loocv_preds.csv")
+
+# F1 scores------------------------
+
+f1 <- function(pred, obs) {
+  acc <- rep(NA, length(obs))
+  acc[which(pred == 1 & obs == 1)] <- "TP" # true positive
+  acc[which(pred == 0 & obs == 0)] <- "TN" # true negative
+  acc[which(pred == 0 & obs == 1)] <- "FN" # false negative
+  acc[which(pred == 1 & obs == 0)] <- "FP" # false positive
+
+  # F1 score is 2*(precision*recall)/(precision+recall)
+  # precision = TP/(TP+FP)
+  # recall = TP/ (TP+FN)
+
+  precision <- table(acc)[4] / (table(acc)[4] + table(acc)[2])
+  recall <- table(acc)[4] / (table(acc)[4] + table(acc)[1])
+
+  f1 <- 2 * (precision * recall) / (precision + recall)
+
+  return(f1)
+}
+
+
+f1_jack <- f1(pred = jpreds$pred.bin, obs = jpreds$fl_binary)
+f1_mango <- f1(pred = mpreds$pred.bin, obs = mpreds$fl_binary)
+f1_tam <- f1(pred = tpreds$pred.bin, obs = tpreds$fl_binary)
+
+cor(jpreds$pred.bin, jpreds$fl_binary, use = "complete.obs")
+cor(mpreds$pred.bin, mpreds$fl_binary, use = "complete.obs")
+cor(tpreds$pred.bin, tpreds$fl_binary, use = "complete.obs")
+
+jmse <- mean((jpreds$fl_binary - jpreds$pred)^2, na.rm = T)
+mmse <- mean((mpreds$fl_binary - mpreds$pred)^2, na.rm = T)
+tmse <- mean((tpreds$fl_binary - tpreds$pred)^2, na.rm = T)
+```
+
+```{r model diagnostics}
+library(sjPlot)
+library(sjmisc)
+
+jack_bin_start <- readRDS("models/onset_models/jack_full.RDS")
+mango_bin_start <- readRDS("models/onset_models/mango_full.RDS")
+tam_bin_start <- readRDS("models/onset_models/tam_full.RDS")
+
+tab_model(jack_bin_start)
+tab_model(mango_bin_start)
+tab_model(tam_bin_start)
+```
+
+
+```{r proportion of trees}
+library(lubridate)
+library(tidyverse)
+library(ggplot2)
+sw_spat$week <- week(sw_spat$Date)
+
+sw_weeks <- sw_spat %>%
+  mutate(week = ifelse(week == 53, 52, week)) %>%
+  group_by(Species_name, week, year) %>%
+  summarise(prop.fl = sum(fl_binary == 1, na.rm = T) / length(fl_binary)) %>%
+  group_by(Species_name, week) %>%
+  summarise(
+    mean.prop.fl = mean(prop.fl),
+    sd.prop.fl = sd(prop.fl),
+    low = mean.prop.fl - sd.prop.fl,
+    high = mean.prop.fl + sd.prop.fl
+  )
+
+
+jack_season <- ggplot(
+  sw_weeks[sw_weeks$Species_name == "Artocarpus heterophyllus", ],
+  aes(x = week, y = mean.prop.fl)
+) +
+  geom_point(col = "#1e824c", cex = 2.5) +
+  geom_linerange(aes(x = week, ymin = low, ymax = high), col = "#1e824c") +
+  # geom_line(col="#1e824c")+
+  geom_line(col = "grey20") +
+  ylim(c(0, 1)) +
+  coord_polar(theta = "x", start = 0, direction = 1) +
+  xlab("week") +
+  ylab("proportion of trees flowering") +
+  ggtitle("seasonal pattern in jackfruit flowering") +
+  theme_minimal() #+scale_y_continuous(labels=percent)
+
+
+jack_season
+
+mango_season <- ggplot(
+  sw_weeks[sw_weeks$Species_name == "Mangifera indica", ],
+  aes(x = week, y = mean.prop.fl)
+) +
+  geom_line(col = "grey40") +
+  geom_point(col = "#f7ca18", cex = 2.5) +
+  geom_linerange(aes(x = week, ymin = low, ymax = high), col = "#f7ca18") +
+  # geom_line(col="#f7ca18")+
+  geom_line(col = "grey40") +
+  ylim(c(0, 1)) +
+  coord_polar(theta = "x", start = 0, direction = 1) +
+  xlab("week") +
+  ylab("proportion of trees flowering") +
+  ggtitle("seasonal pattern in mango flowering") +
+  theme_minimal()
+
+mango_season
+
+tam_season <- ggplot(
+  sw_weeks[sw_weeks$Species_name == "Tamarindus indica", ],
+  aes(x = week, y = mean.prop.fl)
+) +
+  geom_line(col = "grey40") +
+  geom_point(col = "#a6915c", cex = 2.5) +
+  geom_linerange(aes(x = week, ymin = low, ymax = high), col = "#a6915c") +
+  # geom_line(col="#f7ca18")+
+  geom_line(col = "grey40") +
+  ylim(c(0, 1)) +
+  coord_polar(theta = "x", start = 0, direction = 1) +
+  xlab("week") +
+  ylab("proportion of trees flowering") +
+  ggtitle("seasonal pattern in tamarind flowering") +
+  theme_minimal()
+
+tam_season
+
+png("plots/figs/jack_season_polar.png", width = 4, height = 4, units = "in", res = 300)
+jack_season
+dev.off()
+
+png("plots/figs/mango_season_polar.png", width = 4, height = 4, units = "in", res = 300)
+mango_season
+dev.off()
+
+png("plots/figs/tam_season_polar.png", width = 4, height = 4, units = "in", res = 300)
+tam_season
+dev.off()
+```
+
+```{r binary flowering with month}
+sw_spat <- readRDS("data/modified_data/sw_spat.RDS")
+start_nomiss <- readRDS("data/modified_data/start_nomiss.RDS")
+
+# keep only first flowering observations for each year
+library(tidyverse)
+flon.df <- start_nomiss %>%
+  dplyr::mutate(
+    week = lubridate::week(Date),
+    week = ifelse(week == 53, 52, week)
+  ) %>%
+  # first change week to circular
+  dplyr::mutate(
+    week_deg = 360 * week / 52,
+    week_deg2 = ifelse(week_deg < 180, week_deg + 180, week_deg - 180),
+    year2 = ifelse(week_deg < 180, year - 1, year)
+  )
+
+flon.df0 <- flon.df %>%
+  filter(fl_binary == 0) %>%
+  dplyr::select(-week_deg, -week_deg2, -year2)
+
+flon.df1 <- flon.df %>%
+  filter(fl_binary == 1) %>%
+  dplyr::group_by(Species_name, User_Tree_id, year2) %>%
+  dplyr::slice(which.min(week_deg2)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-week_deg, -week_deg2, -year2)
+
+flon.df.all <- rbind(flon.df0, flon.df1)
+
+jack_start <- flon.df.all %>%
+  filter(Species_name == "Artocarpus heterophyllus")
+mango_start <- flon.df.all %>%
+  filter(Species_name == "Mangifera indica")
+tam_start <- flon.df.all %>%
+  filter(Species_name == "Tamarindus indica")
+
+
+# library(tidyverse)
+# jack_start <- start_nomiss %>%
+#   filter(Species_name == "Artocarpus heterophyllus")
+# mango_start <- start_nomiss %>%
+#   filter(Species_name == "Mangifera indica")
+# tam_start <- start_nomiss %>%
+#   filter(Species_name == "Tamarindus indica")
+
+
+# remove
+# elev*temp
+# aspect*solar_rad
+# urban*temp
+# urban*soil_moisture
+
+library(lme4)
+
+# jack
+jack_bin_start <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    month +
+    #  elev_cs*min_temp+
+    elev_cs * soil_moisture +
+    elev_cs * solar_rad +
+    aspect_cs * min_temp +
+    aspect_cs * soil_moisture +
+    # aspect_cs*solar_rad+
+    # light_cs*min_temp+
+    #   light_cs*soil_moisture+
+    lights_cs * solar_rad +
+    # (1 | User_Tree_id) +
+    (1 | Grid_ID), # autocorrelations
+  family = binomial, data = jack_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(jack_bin_start, "models/onset_models/jack_full_month_first_real.RDS")
+
+# pixelID spatial autocorrelation
+# elevation, aspect, slope and light
+# precipation, max temp, mean SM, dry days and solar radiation
+# 20 combinations
+#
+
+
+# mango
+mango_bin_start <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    month +
+    #  elev_cs*min_temp+
+    elev_cs * soil_moisture +
+    elev_cs * solar_rad +
+    aspect_cs * min_temp +
+    aspect_cs * soil_moisture +
+    # aspect_cs*solar_rad+
+    # light_cs*min_temp+
+    #   light_cs*soil_moisture+
+    lights_cs * solar_rad +
+    # (1 | User_Tree_id) +
+    (1 | Grid_ID), # autocorrelations
+  family = binomial, data = mango_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+saveRDS(mango_bin_start, "models/onset_models/mango_full_month_first_real.RDS")
+
+
+# tamarind
+tam_bin_start <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    month +
+    #  elev_cs*min_temp+
+    elev_cs * soil_moisture +
+    elev_cs * solar_rad +
+    aspect_cs * min_temp +
+    aspect_cs * soil_moisture +
+    # aspect_cs*solar_rad+
+    # light_cs*min_temp+
+    #   light_cs*soil_moisture+
+    lights_cs * solar_rad +
+    # (1 | User_Tree_id) +
+    (1 | Grid_ID), # autocorrelations
+  family = binomial, data = tam_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(tam_bin_start, "models/onset_models/tam_full_month_first_real.RDS")
+```
+
+```{r plots}
+jack_bin_start <- readRDS("models/onset_models/jack_full_month.RDS")
+mango_bin_start <- readRDS("models/onset_models/mango_full_month.RDS")
+tam_bin_start <- readRDS("models/onset_models/tam_full_month.RDS")
+
+library(broom.mixed)
+library(ggplot2)
+jack_fe <- tidy(jack_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "fixed")
+jack_re <- tidy(jack_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_pars")
+jack_re_all <- tidy(jack_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_coefs")
+jack_fe$sig <- ifelse(jack_fe$p.value < 0.05, ifelse(jack_fe$p.value < 0.01, "yy", "y"), "n")
+
+newlabs <- c(
+  "(Intercept)", "minimum temperature",
+  "soil moisture",
+  "solar radiation",
+  "month",
+  "elevation", "aspect", "urbanisation",
+  "soil moisture:elevation",
+  "solar radiation:elevation",
+  "min temp:aspect", "soil moisture:aspect",
+  "solar radiation:urban"
+)
+
+jack_fe$newlabs <- factor(newlabs, levels = newlabs)
+`%nin%` <- Negate(`%in%`)
+
+jack_glmer_plot <- ggplot(jack_fe[jack_fe$term %nin% c("elev_cs", "aspect_cs", "lights_cs"), ], aes(y = estimate, x = newlabs, color = factor(sig, levels = c("n", "y", "yy")))) +
+  geom_hline(yintercept = 1, col = "grey", linewidth = 1.5) +
+  geom_point(aes(color = sig), pch = 16, position = position_dodge(width = 0.5), size = 2) +
+  scale_color_manual(values = c("grey", "#1e824c", "#1e824c")) +
+  geom_linerange(aes(x = newlabs, ymin = conf.low, ymax = conf.high, color = sig), position = position_dodge(width = 0.5), linewidth = 1) +
+  ggtitle("onset of jackfruit flowering") +
+  xlab("predictors") +
+  ylab("model coefficient") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal() +
+  guides(shape = "none", color = "none") +
+  labs(tag = "a)") +
+  theme(axis.text.y = element_text(size = 12))
+jack_glmer_plot
+
+# mango
+mango_fe <- tidy(mango_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "fixed")
+mango_re <- tidy(mango_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_pars")
+mango_fe$sig <- ifelse(mango_fe$p.value < 0.05, ifelse(mango_fe$p.value < 0.01, "yy", "y"), "n")
+
+mango_fe$newlabs <- factor(newlabs, levels = newlabs)
+
+mango_glmer_plot <- ggplot(mango_fe[mango_fe$term %nin% c("elev_cs", "aspect_cs", "lights_cs"), ], aes(y = estimate, x = newlabs, color = factor(sig, levels = c("n", "y", "yy")))) +
+  geom_hline(yintercept = 1, col = "grey", linewidth = 1.5) +
+  geom_point(aes(color = sig), pch = 16, position = position_dodge(width = 0.5), size = 2) +
+  scale_color_manual(values = c("grey", "#f7ca18", "#f7ca18")) +
+  geom_linerange(aes(x = newlabs, ymin = conf.low, ymax = conf.high, color = sig), position = position_dodge(width = 0.5), linewidth = 1) +
+  ggtitle("onset of mango flowering") +
+  xlab("predictors") +
+  ylab("model coefficient") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal() +
+  guides(shape = FALSE, color = FALSE) +
+  labs(tag = "b)") +
+  theme(axis.text.y = element_text(size = 12))
+mango_glmer_plot
+
+# tam
+tam_fe <- tidy(tam_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "fixed")
+tam_re <- tidy(tam_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_pars")
+tam_fe$sig <- ifelse(tam_fe$p.value < 0.05, ifelse(tam_fe$p.value < 0.01, "yy", "y"), "n")
+
+tam_fe$newlabs <- factor(newlabs, levels = newlabs)
+
+tam_glmer_plot <- ggplot(tam_fe[tam_fe$term %nin% c("elev_cs", "aspect_cs", "lights_cs"), ], aes(y = estimate, x = newlabs, color = factor(sig, levels = c("n", "y", "yy")))) +
+  geom_hline(yintercept = 1, col = "grey", linewidth = 1.5) +
+  geom_point(aes(color = sig), pch = 16, position = position_dodge(width = 0.5), size = 2) +
+  scale_color_manual(values = c("grey", "#a6915c", "#a6915c")) +
+  geom_linerange(aes(x = newlabs, ymin = conf.low, ymax = conf.high, color = sig), position = position_dodge(width = 0.5), linewidth = 1) +
+  ggtitle("onset of tamarind flowering") +
+  xlab("predictors") +
+  ylab("model coefficient") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal() +
+  guides(shape = FALSE, color = FALSE) +
+  labs(tag = "c)") +
+  theme(axis.text.y = element_text(size = 12))
+tam_glmer_plot
+
+library(gridExtra)
+png("doc/display/onset_withmonth.png", width = 15, height = 6, units = "in", res = 300)
+grid.arrange(jack_glmer_plot, mango_glmer_plot, tam_glmer_plot, ncol = 3)
+dev.off()
+```
+
+```{r models with first onset observation}
+sw_spat <- readRDS("data/modified_data/sw_spat.RDS")
+start_nomiss <- readRDS("data/modified_data/start_nomiss.RDS")
+
+# keep only first flowering observation each year
+
+library(tidyverse)
+flon.df <- start_nomiss %>%
+  dplyr::mutate(
+    week = lubridate::week(Date),
+    week = ifelse(week == 53, 52, week)
+  ) %>%
+  # first change week to circular
+  dplyr::mutate(
+    week_deg = 360 * week / 52,
+    week_deg2 = ifelse(week_deg < 180, week_deg + 180, week_deg - 180),
+    year2 = ifelse(week_deg < 180, year - 1, year)
+  )
+
+flon.df0 <- flon.df %>%
+  filter(fl_binary == 0) %>%
+  dplyr::select(-week_deg, -week_deg2, -year2)
+
+flon.df1 <- flon.df %>%
+  filter(fl_binary == 1) %>%
+  dplyr::group_by(Species_name, User_Tree_id, year2) %>%
+  dplyr::slice(which.min(week_deg2)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-week_deg, -week_deg2, -year2)
+
+flon.df.all <- rbind(flon.df0, flon.df1)
+
+jack_start <- flon.df.all %>%
+  filter(Species_name == "Artocarpus heterophyllus")
+mango_start <- flon.df.all %>%
+  filter(Species_name == "Mangifera indica")
+tam_start <- flon.df.all %>%
+  filter(Species_name == "Tamarindus indica")
+
+
+# remove
+# elev*temp
+# aspect*solar_rad
+# urban*temp
+# urban*soil_moisture
+
+library(lme4)
+
+# jack
+jack_bin_start <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    # month +
+    elev_cs * soil_moisture +
+    elev_cs * solar_rad +
+    aspect_cs * min_temp +
+    aspect_cs * soil_moisture +
+    lights_cs * solar_rad +
+    (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+  # (1 | Grid_ID),
+  family = binomial, data = jack_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 1000000))
+)
+
+saveRDS(jack_bin_start, "models/onset_models/jack_full_month_first.RDS")
+
+# pixelID spatial autocorrelation
+# elevation, aspect, slope and light
+# precipation, max temp, mean SM, dry days and solar radiation
+# 20 combinations
+#
+
+
+# mango
+mango_bin_start <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    # month +
+    elev_cs * soil_moisture +
+    elev_cs * solar_rad +
+    aspect_cs * min_temp +
+    aspect_cs * soil_moisture +
+    lights_cs * solar_rad +
+    (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+  # (1 | Grid_ID), # autocorrelations
+  family = binomial, data = mango_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+saveRDS(mango_bin_start, "models/onset_models/mango_full_month_first.RDS")
+
+
+# tamarind
+tam_bin_start <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    # month +
+    elev_cs * soil_moisture +
+    elev_cs * solar_rad +
+    aspect_cs * min_temp +
+    aspect_cs * soil_moisture +
+    lights_cs * solar_rad +
+    (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+  # (1 | Grid_ID), # autocorrelations
+  family = binomial, data = tam_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(tam_bin_start, "models/onset_models/tam_full_month_first.RDS")
+```
+
+```{r plots}
+jack_bin_start <- readRDS("models/onset_models/jack_full_month_first.RDS")
+mango_bin_start <- readRDS("models/onset_models/mango_full_month_first.RDS")
+tam_bin_start <- readRDS("models/onset_models/tam_full_month_first.RDS")
+
+library(broom.mixed)
+library(ggplot2)
+jack_fe <- tidy(jack_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "fixed", conf.level = 0.9)
+jack_re <- tidy(jack_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_pars", conf.level = 0.9)
+jack_re_all <- tidy(jack_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_coefs", conf.level = 0.9)
+# jack_fe$sig <- ifelse(jack_fe$p.value < 0.05, ifelse(jack_fe$p.value < 0.01, "yy", "y"), "n")
+# significance if conf.int does not overlap 1
+jack_fe$sig <- ifelse(jack_fe$conf.low > 1 | jack_fe$conf.high < 1, "y", "n")
+
+
+newlabs <- c(
+  "(Intercept)", "minimum temperature",
+  "soil moisture",
+  "solar radiation",
+  # "month",
+  "elevation", "aspect", "urbanisation",
+  "soil moisture:elevation",
+  "solar radiation:elevation",
+  "min temp:aspect", "soil moisture:aspect",
+  "solar radiation:urban"
+)
+
+jack_fe$newlabs <- factor(newlabs, levels = newlabs)
+`%nin%` <- Negate(`%in%`)
+
+jack_glmer_plot <- ggplot(jack_fe[jack_fe$term %nin% c("elev_cs", "aspect_cs", "lights_cs"), ], aes(y = estimate, x = newlabs, color = factor(sig, levels = c("n", "y")))) +
+  geom_hline(yintercept = 1, col = "grey", linewidth = 1.5) +
+  geom_point(aes(color = sig), pch = 16, position = position_dodge(width = 0.5), size = 2) +
+  scale_color_manual(values = c("grey", "#1e824c")) +
+  geom_linerange(aes(x = newlabs, ymin = conf.low, ymax = conf.high, color = sig), position = position_dodge(width = 0.5), linewidth = 1) +
+  ggtitle("onset of jackfruit flowering") +
+  xlab("predictors") +
+  ylab("model coefficient") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal() +
+  guides(shape = "none", color = "none") +
+  labs(tag = "a)") +
+  theme(axis.text.y = element_text(size = 12))
+jack_glmer_plot
+
+# mango
+mango_fe <- tidy(mango_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "fixed", conf.level = 0.9)
+mango_re <- tidy(mango_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_pars", conf.level = 0.9)
+# mango_fe$sig <- ifelse(mango_fe$p.value < 0.05, ifelse(mango_fe$p.value < 0.01, "yy", "y"), "n")
+mango_fe$sig <- ifelse(mango_fe$conf.low > 1 | mango_fe$conf.high < 1, "y", "n")
+
+mango_fe$newlabs <- factor(newlabs, levels = newlabs)
+
+mango_glmer_plot <- ggplot(mango_fe[mango_fe$term %nin% c("elev_cs", "aspect_cs", "lights_cs"), ], aes(y = estimate, x = newlabs, color = factor(sig, levels = c("n", "y")))) +
+  geom_hline(yintercept = 1, col = "grey", linewidth = 1.5) +
+  geom_point(aes(color = sig), pch = 16, position = position_dodge(width = 0.5), size = 2) +
+  scale_color_manual(values = c("grey", "#f7ca18")) +
+  geom_linerange(aes(x = newlabs, ymin = conf.low, ymax = conf.high, color = sig), position = position_dodge(width = 0.5), linewidth = 1) +
+  ggtitle("onset of mango flowering") +
+  xlab("predictors") +
+  ylab("model coefficient") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal() +
+  guides(shape = FALSE, color = FALSE) +
+  labs(tag = "b)") +
+  theme(axis.text.y = element_text(size = 12))
+mango_glmer_plot
+
+# tam
+tam_fe <- tidy(tam_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "fixed", conf.level = 0.9)
+tam_re <- tidy(tam_bin_start, conf.int = TRUE, exponentiate = TRUE, effects = "ran_pars", conf.level = 0.9)
+# tam_fe$sig <- ifelse(tam_fe$p.value < 0.05, ifelse(tam_fe$p.value < 0.01, "yy", "y"), "n")
+tam_fe$sig <- ifelse(tam_fe$conf.low > 1 | tam_fe$conf.high < 1, "y", "n")
+
+tam_fe$newlabs <- factor(newlabs, levels = newlabs)
+
+tam_glmer_plot <- ggplot(tam_fe[tam_fe$term %nin% c("elev_cs", "aspect_cs", "lights_cs"), ], aes(y = estimate, x = newlabs, color = factor(sig, levels = c("n", "y")))) +
+  geom_hline(yintercept = 1, col = "grey", linewidth = 1.5) +
+  geom_point(aes(color = sig), pch = 16, position = position_dodge(width = 0.5), size = 2) +
+  scale_color_manual(values = c("grey", "#a6915c")) +
+  geom_linerange(aes(x = newlabs, ymin = conf.low, ymax = conf.high, color = sig), position = position_dodge(width = 0.5), linewidth = 1) +
+  ggtitle("onset of tamarind flowering") +
+  xlab("predictors") +
+  ylab("model coefficient") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal() +
+  guides(shape = FALSE, color = FALSE) +
+  labs(tag = "c)") +
+  theme(axis.text.y = element_text(size = 12))
+tam_glmer_plot
+
+library(gridExtra)
+png("doc/display/Fig4_new.png", width = 15, height = 6, units = "in", res = 300)
+grid.arrange(jack_glmer_plot, mango_glmer_plot, tam_glmer_plot, ncol = 3)
+dev.off()
+```
+
+```{r model diagnostics}
+library(lme4)
+library(performance)
+# library(insight)
+
+png("doc/display/jack_first_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(jack_bin_start)
+dev.off()
+
+# png("doc/display/check_jack_first_diag_qq.png", width = 12, height = 16, units = "in", res = 300)
+# # check_model(jack_bin_start, check = "qq", show_dots = F)
+# out<-check_residuals(jack_bin_start)
+# plot(out, base=T)
+# dev.off()
+
+png("doc/display/mango_first_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(mango_bin_start)
+dev.off()
+
+png("doc/display/tam_first_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(tam_bin_start)
+dev.off()
+```
+
+```{r models without spatial predictors}
+sw_spat <- readRDS("data/modified_data/sw_spat.RDS")
+start_nomiss <- readRDS("data/modified_data/start_nomiss.RDS")
+
+# keep only first flowering observation each year
+
+library(tidyverse)
+flon.df <- start_nomiss %>%
+  dplyr::mutate(
+    week = lubridate::week(Date),
+    week = ifelse(week == 53, 52, week)
+  ) %>%
+  # first change week to circular
+  dplyr::mutate(
+    week_deg = 360 * week / 52,
+    week_deg2 = ifelse(week_deg < 180, week_deg + 180, week_deg - 180),
+    year2 = ifelse(week_deg < 180, year - 1, year)
+  )
+
+flon.df0 <- flon.df %>%
+  filter(fl_binary == 0) %>%
+  dplyr::select(-week_deg, -week_deg2, -year2)
+
+flon.df1 <- flon.df %>%
+  filter(fl_binary == 1) %>%
+  dplyr::group_by(Species_name, User_Tree_id, year2) %>%
+  dplyr::slice(which.min(week_deg2)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-week_deg, -week_deg2, -year2)
+
+flon.df.all <- rbind(flon.df0, flon.df1)
+
+jack_start <- flon.df.all %>%
+  filter(Species_name == "Artocarpus heterophyllus")
+mango_start <- flon.df.all %>%
+  filter(Species_name == "Mangifera indica")
+tam_start <- flon.df.all %>%
+  filter(Species_name == "Tamarindus indica")
+
+
+library(lme4)
+
+jack_bin_start_nospace <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+  family = binomial, data = jack_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 1000000))
+)
+
+saveRDS(jack_bin_start_nospace, "models/onset_models/jack_nospace_first.RDS")
+
+mango_bin_start_nospace <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+  family = binomial, data = mango_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(mango_bin_start_nospace, "models/onset_models/mango_nospace_first.RDS")
+
+tam_bin_start_nospace <- glmer(
+  fl_binary ~ min_temp +
+    soil_moisture +
+    solar_rad +
+    (1 | User_Tree_id) + (1 | Grid_ID), # autocorrelations
+  family = binomial, data = tam_start,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(tam_bin_start_nospace, "models/onset_models/tam_nospace_first.RDS")
+```
+
+```{r compare models with/out spatial predictors}
+jack_bin_start <- readRDS("models/onset_models/jack_full_month_first.RDS")
+jack_bin_start_nospace <- readRDS("models/onset_models/jack_nospace_first.RDS")
+mango_bin_start <- readRDS("models/onset_models/mango_full_month_first.RDS")
+mango_bin_start_nospace <- readRDS("models/onset_models/mango_nospace_first.RDS")
+tam_bin_start <- readRDS("models/onset_models/tam_full_month_first.RDS")
+tam_bin_start_nospace <- readRDS("models/onset_models/tam_nospace_first.RDS")
+
+library(performance)
+compare_performance(jack_bin_start, jack_bin_start_nospace)
+compare_performance(mango_bin_start, mango_bin_start_nospace)
+compare_performance(tam_bin_start, tam_bin_start_nospace)
+```
+
+
+```{r LOOCV}
+year <- 2014:2022
+
+jmse <- mmse <- tmse <- data.frame(year = year, mse = NA, cor = NA)
+jests <- mests <- tests <- data.frame(var = c("(Intercept)", "min_temp", "soil_moisture", "solar_rad", "elev_cs", "aspect_cs", "lights_cs", "soil_moisture:elev_cs", "solar_rad:elev_cs", "min_temp:aspect_cs", "soil_moisture:aspect_cs", "solar_rad:lights_cs"))
+jpreds <- mpreds <- tpreds <- data.frame(NA, NA, NA)
+colnames(jpreds) <- colnames(mpreds) <- colnames(tpreds) <- c("obs", "pred", "year")
+jpreds <- jpreds[F, ]
+mpreds <- mpreds[F, ]
+tpreds <- tpreds[F, ]
+
+
+for (i in 1:length(year)) {
+  yr <- year[i]
+
+  # jack-----
+  jtrain <- jack_start[jack_start$year != yr, ]
+  jtest <- jack_start[jack_start$year == yr, ]
+
+  jyr_mod <- glmer(
+    fl_binary ~ min_temp +
+      soil_moisture +
+      solar_rad +
+      #  elev_cs*min_temp+
+      elev_cs * soil_moisture +
+      elev_cs * solar_rad +
+      aspect_cs * min_temp +
+      aspect_cs * soil_moisture +
+      # aspect_cs*solar_rad+
+      # light_cs*min_temp+
+      #   light_cs*soil_moisture+
+      lights_cs * solar_rad +
+      # (1 | User_Tree_id) +
+      (1 | Grid_ID), # autocorrelations
+    family = binomial, data = jtrain,
+    glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+
+  jpred <- plogis(predict(jyr_mod, newdata = jtest, allow.new.levels = T))
+  jests <- cbind(jests, coef(summary(jyr_mod))[, 1])
+  jests <- cbind(jests, coef(summary(jyr_mod))[, 2])
+  jmse[i, 2] <- mean((jtest$fl_binary - jpred)^2, na.rm = T)
+  jmse[i, 3] <- cor(jtest$fl_binary, jpred, use = "complete.obs")
+
+  pred.df <- data.frame(obs = jtest[, "fl_binary"], pred = jpred, year = rep(yr, year = length(jpred)))
+  jpreds <- rbind(jpreds, pred.df)
+
+
+  saveRDS(jyr_mod, paste0("models/onset_models/jack_first_", yr, ".RDS"))
+
+  # mango
+  mtrain <- mango_start[mango_start$year != yr, ]
+  mtest <- mango_start[mango_start$year == yr, ]
+
+  myr_mod <- glmer(
+    fl_binary ~ min_temp +
+      soil_moisture +
+      solar_rad +
+      elev_cs * soil_moisture +
+      elev_cs * solar_rad +
+      aspect_cs * min_temp +
+      aspect_cs * soil_moisture +
+      lights_cs * solar_rad +
+      # (1 | User_Tree_id) +
+      (1 | Grid_ID), # autocorrelations
+    family = binomial, data = mtrain,
+    glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+
+  mpred <- plogis(predict(myr_mod, newdata = mtest, allow.new.levels = T))
+  mests <- cbind(mests, coef(summary(myr_mod))[, 1])
+  mests <- cbind(mests, coef(summary(myr_mod))[, 2])
+  mmse[i, 2] <- mean((mtest$fl_binary - mpred)^2, na.rm = T)
+  mmse[i, 3] <- cor(mtest$fl_binary, mpred, use = "complete.obs")
+
+  pred.df <- data.frame(obs = mtest[, "fl_binary"], pred = mpred, year = rep(yr, year = length(mpred)))
+  mpreds <- rbind(mpreds, pred.df)
+
+
+  saveRDS(myr_mod, paste0("models/onset_models/mango_first_", yr, ".RDS"))
+
+  # tam-----
+  ttrain <- tam_start[tam_start$year != yr, ]
+  ttest <- tam_start[tam_start$year == yr, ]
+
+  tyr_mod <- glmer(
+    fl_binary ~ min_temp +
+      soil_moisture +
+      solar_rad +
+      elev_cs * soil_moisture +
+      elev_cs * solar_rad +
+      aspect_cs * min_temp +
+      aspect_cs * soil_moisture +
+      lights_cs * solar_rad +
+      # (1 | User_Tree_id) +
+      (1 | Grid_ID), # autocorrelations
+    family = binomial, data = ttrain,
+    glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+
+  tpred <- plogis(predict(tyr_mod, newdata = ttest, allow.new.levels = T))
+  tests <- cbind(tests, coef(summary(tyr_mod))[, 1])
+  tests <- cbind(tests, coef(summary(tyr_mod))[, 2])
+  tmse[i, 2] <- mean((ttest$fl_binary - tpred)^2, na.rm = T)
+  tmse[i, 3] <- cor(ttest$fl_binary, tpred, use = "complete.obs")
+
+  pred.df <- data.frame(obs = ttest[, "fl_binary"], pred = tpred, year = rep(yr, year = length(tpred)))
+  tpreds <- rbind(tpreds, pred.df)
+
+
+  saveRDS(tyr_mod, paste0("models/onset_models/tam_first_", yr, ".RDS"))
+}
+
+
+# mse
+write.csv(jmse, "models/onset_models/jack_first_loocv_mse.csv", row.names = F)
+write.csv(mmse, "models/onset_models/mango_first_loocv_mse.csv", row.names = F)
+write.csv(tmse, "models/onset_models/tam_first_loocv_mse.csv", row.names = F)
+
+# ests
+colnames(jests)[seq(2, (ncol(jests) - 1), by = 2)] <- paste0("ests_", year)
+colnames(jests)[seq(3, ncol(jests), by = 2)] <- paste0("std_er_", year)
+colnames(mests)[seq(2, (ncol(mests) - 1), by = 2)] <- paste0("ests_", year)
+colnames(mests)[seq(3, ncol(mests), by = 2)] <- paste0("std_er_", year)
+colnames(tests)[seq(2, (ncol(tests) - 1), by = 2)] <- paste0("ests_", year)
+colnames(tests)[seq(3, ncol(tests), by = 2)] <- paste0("std_er_", year)
+
+write.csv(jests, "models/onset_models/jack_first_loocv_ests.csv", row.names = F)
+write.csv(mests, "models/onset_models/mango_first_loocv_ests.csv", row.names = F)
+write.csv(tests, "models/onset_models/tam_first_loocv_ests.csv", row.names = F)
+
+# preds
+
+jpreds$pred.bin <- ifelse(jpreds$pred >= 0.5, 1, 0)
+mpreds$pred.bin <- ifelse(mpreds$pred >= 0.5, 1, 0)
+tpreds$pred.bin <- ifelse(tpreds$pred >= 0.5, 1, 0)
+write.csv(jpreds, "models/onset_models/jack_first_loocv_preds.csv", row.names = F)
+write.csv(mpreds, "models/onset_models/mango_first_loocv_preds.csv", row.names = F)
+write.csv(tpreds, "models/onset_models/tam_first_loocv_preds.csv", row.names = F)
+```
+
+```{r model diagnostics}
+library(sjPlot)
+library(sjmisc)
+
+jack_bin_start <- readRDS("models/onset_models/jack_full_month_first.RDS")
+mango_bin_start <- readRDS("models/onset_models/mango_full_month_first.RDS")
+tam_bin_start <- readRDS("models/onset_models/tam_full_month_first.RDS")
+
+tab_model(jack_bin_start)
+tab_model(mango_bin_start)
+tab_model(tam_bin_start)
+```
+
+```{r f1}
+jpreds <- read.csv("models/onset_models/jack_first_loocv_preds.csv")
+mpreds <- read.csv("models/onset_models/mango_first_loocv_preds.csv")
+tpreds <- read.csv("models/onset_models/tam_first_loocv_preds.csv")
+
+View(tpreds)
+# F1 scores------------------------
+
+f1 <- function(pred, obs) {
+  acc <- rep(NA, length(obs))
+  acc[which(pred == 1 & obs == 1)] <- "TP" # true positive
+  acc[which(pred == 0 & obs == 0)] <- "TN" # true negative
+  acc[which(pred == 0 & obs == 1)] <- "FN" # false negative
+  acc[which(pred == 1 & obs == 0)] <- "FP" # false positive
+
+  # F1 score is 2*(precision*recall)/(precision+recall)
+  # precision = TP/(TP+FP)
+  # recall = TP/ (TP+FN)
+
+  precision <- table(acc)[4] / (table(acc)[4] + table(acc)[2])
+  recall <- table(acc)[4] / (table(acc)[4] + table(acc)[1])
+
+  f1 <- 2 * (precision * recall) / (precision + recall)
+
+  return(f1)
+}
+
+
+f1_jack <- f1(pred = jpreds$pred.bin, obs = jpreds$fl_binary)
+f1_mango <- f1(pred = mpreds$pred.bin, obs = mpreds$fl_binary)
+f1_tam <- f1(pred = tpreds$pred.bin, obs = tpreds$fl_binary)
+
+cor(jpreds$pred.bin, jpreds$fl_binary, use = "complete.obs")
+cor(mpreds$pred.bin, mpreds$fl_binary, use = "complete.obs")
+cor(tpreds$pred.bin, tpreds$fl_binary, use = "complete.obs")
+
+jmse <- mean((jpreds$fl_binary - jpreds$pred)^2, na.rm = T)
+mmse <- mean((mpreds$fl_binary - mpreds$pred)^2, na.rm = T)
+tmse <- mean((tpreds$fl_binary - tpreds$pred)^2, na.rm = T)
+```

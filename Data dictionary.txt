@@ -1,0 +1,40 @@
+Data dictionary for SWdata2014-2022.csv
+------------------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+Column head	    |	Description
+--------------------|--------------------------------------------------------------------------------------------------------------------------------------
+Observation_ID	    |	Unique numeric ID for the observation
+User_id		    |	Unique numeric ID of contributor
+User_Tree_id	    |	Unique numeric ID of the tree being observed. The same ID appears more than once if the tree has been observed more than once.
+Species_name	    |	Scientific and common name of species
+Date_of_observation |	Date on which the observation was made (can be added as a back date also)
+Leaves_fresh	    |	"-2": "not observed/reported', "-1": 'don't know', "0": 'none', "1": 'few', "2": "many" 
+Leaves_mature	    |	"-2": "not observed/reported', "-1": 'don't know', "0": 'none', "1": 'few', "2": "many" 
+Leaves_old	    |	"-2": "not observed/reported', "-1": 'don't know', "0": 'none', "1": 'few', "2": "many" 
+Flowers_bud	    |	"-2": "not observed/reported', "-1": 'don't know', "0": 'none', "1": 'few', "2": "many" 
+Flowers_open	    |	"-2": "not observed/reported', "-1": 'don't know', "0": 'none', "1": 'few', "2": "many" 
+Flowers_male	    |	"-2": "not observed/reported', "-1": 'don't know', "0": 'none', "1": 'few', "2": "many" 
+Flowers_Female	    |	"-2": "not observed/reported', "-1": 'don't know', "0": 'none', "1": 'few', "2": "many" 
+Fruits_unripe	    |	"-2": "not observed/reported', "-1": 'don't know', "0": 'none', "1": 'few', "2": "many" 
+Fruits_ripe	    |	"-2": "not observed/reported', "-1": 'don't know', "0": 'none', "1": 'few', "2": "many" 
+Lat		    |	Latitude in decimal degrees
+Long		    |	Longitude in decimal degrees
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+	
+	
+Phenophase intensity Key	
+-------------------------
+None (0)	phenophase absent
+Few  (1)        1/3rd of the canopy showed presence of  phenophase
+Many (2)	>1/3rd of the canopy showed presence of phenophase
+	
+Notes	
+-----
+
+1. locations for some obervations may be missing. This occurs when observations have been made under poor internet connectivity	
+2. Two types of observations can be made by contributors  - 'regular' (repeated on the same tree every week) and 'casual' (single incidental observation on a tree). The latter was introduced in 2018 and will reflect in the increased occurrence of single observation trees post 2018	
+3. Data after 2014 are more consistent in terms of trees observed regularly, and observation protocol followed. 	
+4. Phenopahses - Leaves_old and Fruits_open were introduced in 2018, and will appear as 'NA' before that. 
+5. Phenophases - Flowers_male and Flowers_Female occur in only some species. For all practical purposes, these can be integrated with 'Flowers_open' phenophase
+

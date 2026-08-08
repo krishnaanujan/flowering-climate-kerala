@@ -1,0 +1,1977 @@
+---
+title: "analysis"
+author: "Krishna Anujan"
+date: "20/09/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r adding env columns}
+library(raster)
+
+msg <- read.csv("data/raw_data/ObsLevel_Sept22.csv")
+# dem_stack
+# light_vals
+
+msg_coords <- msg
+coordinates(msg_coords) <- ~ long_new2 + lat_new2
+
+dem_stack <- stack("C://Users/krish/Documents/SeasonWatch/MSG/other_data/env_vars/dem_stack")
+lights_KL <- raster("C://Users/krish/Documents/SeasonWatch/MSG/other_data/env_vars/lights_KL")
+dem_vals <- extract(dem_stack, msg_coords)
+light_vals <- extract(lights_KL, msg_coords)
+
+# writing the dem stack separately
+# elev<-writeRaster(dem_stack$elev, "C://Users/krish/Documents/SeasonWatch/MSG/other_data/env_vars/elev.grd")
+
+# slope<-writeRaster(dem_stack$slope, "C://Users/krish/Documents/SeasonWatch/MSG/other_data/env_vars/slope.grd")
+
+# aspect<-writeRaster(dem_stack$aspect, "C://Users/krish/Documents/SeasonWatch/MSG/other_data/env_vars/aspect.grd")
+
+msg <- cbind(msg, dem_vals, light_vals)
+# write.csv(msg, "fromMSG/All3_ObservationLevel_spat.csv", row.names=F)
+
+sw_2014 <- read.csv("data/modified_data/sw_msg_from2014.csv")
+sw_spat <- msg
+
+sw_spat$Date <- sw_2014$Date2[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$day <- sw_2014$date[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$month <- sw_2014$month[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$year <- sw_2014$year[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$User_Tree_id <- sw_2014$User_Tree_id[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$User_id <- sw_2014$User_id[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+sw_spat$is.KL2 <- sw_2014$is.KL2[match(sw_spat$Observation_ID, sw_2014$Observation_ID)]
+# write.csv(sw_spat, "fromMSG/All3_ObservationLevel_spat.csv", row.names=F)
+```
+
+```{r correlations between variables}
+library(sp)
+library(lubridate)
+library(plyr)
+library(ggplot2)
+library(tidyr)
+
+
+# sw_spat<-read.csv("fromMSG/All3_ObservationLevel_spat.csv") #has DEM and night lights and Tree ID etc
+
+sw_spat <- sw_spat[sw_spat$is.KL2 == 1, ]
+
+sw_spat_forcor <- ddply(sw_spat, .(Species_name, User_Tree_id), summarise,
+  lat = mean(lat_new2), long = mean(long_new2),
+  elev = mean(elev), slope = mean(slope),
+  aspect = mean(aspect), light = mean(light_vals),
+  pcp = mean(FNSum_PCP), maxtemp = mean(FNMean_MaxTemp),
+  mintemp = mean(FNMean_MinTemp), meantemp = mean(FNMean_MeanTemp),
+  SM = mean(FNMean_MeanSM), DryDays = mean(FNSum_ConsDryDays),
+  mn_pcp = mean(MNSum_PCP), mn_maxtemp = mean(MNMean_MaxTemp),
+  mn_mintemp = mean(MNMean_MinTemp), mn_meantemp = mean(MNMean_MeanTemp),
+  mn_SM = mean(MNMean_MeanSM), mn_DryDays = mean(MNSum_ConsDryDays),
+  qr_pcp = mean(QrSum_PCP), qr_maxtemp = mean(QrMean_MaxTemp),
+  qr_mintemp = mean(QrMean_MinTemp), qr_meantemp = mean(QrMean_MeanTemp),
+  qr_SM = mean(QrMean_MeanSM), qr_DryDays = mean(QrSum_ConsDryDays)
+)
+
+# png("plots/distr_jack.png", width=8, height=8, res=300, units="in")
+ggplot(gather(sw_spat_forcor[sw_spat_forcor$Species_name == "Artocarpus heterophyllus", 3:8]), aes(value)) +
+  geom_histogram(bins = 10) +
+  ggtitle("jackfruit") +
+  facet_wrap(~key, scales = "free_x")
+# dev.off()
+
+# png("plots/distr_mango.png", width=8, height=8, res=300, units="in")
+ggplot(gather(sw_spat_forcor[sw_spat_forcor$Species_name == "Mangifera indica", 3:8]), aes(value)) +
+  geom_histogram(bins = 10) +
+  ggtitle("mango") +
+  facet_wrap(~key, scales = "free_x")
+# dev.off()
+
+# png("plots/distr_tam.png", width=8, height=8, res=300, units="in")
+ggplot(gather(sw_spat_forcor[sw_spat_forcor$Species_name == "Tamarindus indica", 3:8]), aes(value)) +
+  geom_histogram(bins = 10) +
+  ggtitle("tamarind") +
+  facet_wrap(~key, scales = "free_x")
+# dev.off()
+
+spatcor <- cor(sw_spat_forcor[, 3:8], use = "complete.obs")
+
+# png("plots/spat_cor.png", width=4, height=4, res=300, units="in")
+ggcorrplot::ggcorrplot(spatcor, lab = T)
+# dev.off()
+
+spattempcor <- cor(sw_spat_forcor[, 3:19], use = "complete.obs")
+
+# png("plots/spattemp_cor.png", width=8, height=8, res=300, units="in")
+ggcorrplot::ggcorrplot(spattempcor, lab = T, type = "lower")
+# dev.off()
+
+
+sw_fn_cor <- ddply(sw_spat, .(Grid_ID, month), summarise,
+  fn_pcp = mean(FNSum_PCP), fn_maxtemp = mean(FNMean_MaxTemp),
+  fn_mintemp = mean(FNMean_MinTemp), fn_meantemp = mean(FNMean_MeanTemp),
+  fn_SM = mean(FNMean_MeanSM), fn_DryDays = mean(FNSum_ConsDryDays),
+  mn_pcp = mean(MNSum_PCP), mn_maxtemp = mean(MNMean_MaxTemp),
+  mn_mintemp = mean(MNMean_MinTemp), mn_meantemp = mean(MNMean_MeanTemp),
+  mn_SM = mean(MNMean_MeanSM), mn_DryDays = mean(MNSum_ConsDryDays),
+  qr_pcp = mean(QrSum_PCP), qr_maxtemp = mean(QrMean_MaxTemp),
+  qr_mintemp = mean(QrMean_MinTemp), qr_meantemp = mean(QrMean_MeanTemp),
+  qr_SM = mean(QrMean_MeanSM), qr_DryDays = mean(QrSum_ConsDryDays)
+)
+
+fn_cor <- cor(sw_fn_cor[, 3:ncol(sw_fn_cor)])
+
+png("doc/display/SFig_corr_2.png", width = 8, height = 8, res = 300, units = "in")
+ggcorrplot::ggcorrplot(fn_cor, lab = T, type = "lower")
+dev.off()
+
+# scale everything
+# https://stackoverflow.com/questions/41766181/correct-way-to-scale-for-multilevel-regression-using-lmer-r
+
+sw_spat_rescale <- transform(sw_spat,
+  FNSum_PCP_cs = scale(FNSum_PCP),
+  FNMean_MaxTemp_cs = scale(FNMean_MaxTemp),
+  FNMean_MeanSM_cs = scale(FNMean_MeanSM),
+  FNSum_DryDays_cs = scale(FNSum_ConsDryDays),
+  MNSum_PCP_cs = scale(MNSum_PCP),
+  MNMean_MaxTemp_cs = scale(MNMean_MaxTemp),
+  MNMean_MeanSM_cs = scale(MNMean_MeanSM),
+  MNSum_DryDays_cs = scale(MNSum_ConsDryDays),
+  QrSum_PCP_cs = scale(QrSum_PCP),
+  QrMean_MaxTemp_cs = scale(QrMean_MaxTemp),
+  QrMean_MeanSM_cs = scale(QrMean_MeanSM),
+  QrSum_DryDays_cs = scale(QrSum_ConsDryDays),
+  elev_cs = scale(elev), slope_cs = scale(slope),
+  light_cs = scale(light_vals), aspect_cs = scale(aspect),
+  lat_sc = scale(lat_new2), long_sc = scale(long_new2)
+)
+
+
+spat_cs_cor <- cor(sw_spat_rescale[, 54:59], use = "complete.obs")
+ggcorrplot::ggcorrplot(spat_cs_cor, lab = T, type = "lower")
+```
+
+```{r explore models}
+# library(bbmle)
+library(lme4)
+
+
+
+# flbin_glmm<-glmer(fl_binary~FNSum_PCP+FNMean_MaxTemp+FNMean_MeanSM+FNSum_DryDays+
+#                    MNSum_PCP+MNMean_MaxTemp+MNMean_MeanSM+
+#                    QrSum_PCP+QrMean_MeanTemp+QrMean_MeanSM+
+#                    elev+slope+light_vals+(1|User_Tree_id)+
+#                    (1|Species_name), data=sw_spat, family="binomial") #Species as a fixed effect
+
+# all species together
+
+flbin_glmm_cs <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs + FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs + slope_cs + light_cs + Species_name + # Maybe remove SM
+    # lat_sc+long_sc+
+    (1 | User_Tree_id) + (1 | year), #+(1|User_id)
+  data = sw_spat_rescale,
+  family = "binomial"
+)
+
+frbin_glmm_cs <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs + FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs + slope_cs + light_cs + Species_name +
+    # lat_sc+long_sc+
+    (1 | User_Tree_id) + (1 | year),
+  data = sw_spat_rescale,
+  family = "binomial"
+)
+
+
+frbin_glmm_cs <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs + FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs + slope_cs + light_cs + Species_name +
+    # lat_sc+long_sc+
+    (1 | User_Tree_id) + (1 | year),
+  data = sw_spat_rescale,
+  family = "binomial"
+)
+
+library(sjPlot)
+
+tab_model(flbin_glmm_cs, frbin_glmm_cs, file = "plots/flbin_frbin_all_cs.html")
+
+# flbin_glmm_jack<-glmer(fl_binary~FNSum_PCP+FNMean_MaxTemp+FNMean_MeanSM+FNSum_DryDays+
+# MNSum_PCP+MNMean_MaxTemp+MNMean_MeanSM+
+# QrSum_PCP+QrMean_MeanTemp+QrMean_MeanSM+
+#                    elev+slope+light_vals+(1|User_Tree_id),
+#                    data=sw_spat[sw_spat$Species_name=="Artocarpus heterophyllus",],
+#                    family="binomial")
+
+flbin_glmm_jack_cs <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs + FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs + slope_cs + light_cs +
+    # lat_sc+long_sc+
+    (1 | User_Tree_id) + (1 | year),
+  data = sw_spat_rescale[sw_spat_rescale$Species_name == "Artocarpus heterophyllus", ],
+  family = "binomial"
+)
+flbin_glmm_mango_cs <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs + FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs + slope_cs + light_cs +
+    # lat_new2+long_new2+
+    (1 | User_Tree_id) + (1 | year),
+  data = sw_spat_rescale[sw_spat_rescale$Species_name == "Mangifera indica", ],
+  family = "binomial"
+)
+flbin_glmm_tam_cs <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs + FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs + slope_cs + light_cs +
+    # lat_new2+long_new2+
+    (1 | User_Tree_id) + (1 | year),
+  data = sw_spat_rescale[sw_spat_rescale$Species_name == "Tamarindus indica", ],
+  family = "binomial"
+)
+
+# Fruiting separate models
+frbin_glmm_jack_cs <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs + FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs + slope_cs + light_cs +
+    # lat_sc+long_sc+
+    (1 | User_Tree_id) + (1 | year),
+  data = sw_spat_rescale[sw_spat_rescale$Species_name == "Artocarpus heterophyllus", ],
+  family = "binomial"
+)
+frbin_glmm_mango_cs <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs + FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs + slope_cs + light_cs +
+    # lat_new2+long_new2+
+    (1 | User_Tree_id) + (1 | year),
+  data = sw_spat_rescale[sw_spat_rescale$Species_name == "Mangifera indica", ],
+  family = "binomial"
+)
+frbin_glmm_tam_cs <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs + FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs + slope_cs + light_cs +
+    # lat_new2+long_new2+
+    (1 | User_Tree_id) + (1 | year),
+  data = sw_spat_rescale[sw_spat_rescale$Species_name == "Tamarindus indica", ],
+  family = "binomial"
+)
+
+
+# summary(flbin_glmm_jack_cs)
+
+library(sjPlot)
+
+
+tab_model(flbin_glmm_jack_cs, flbin_glmm_mango_cs, flbin_glmm_tam_cs, file = "plots/flbin_3sp_cs.html")
+tab_model(frbin_glmm_jack_cs, frbin_glmm_mango_cs, frbin_glmm_tam_cs, file = "plots/frbin_3sp_cs.html")
+```
+
+```{r ordinal models}
+# borrowing code from here - https://drizopoulos.github.io/GLMMadaptive/articles/Ordinal_Mixed_Models.html
+
+# for proportion odds, code from here-
+# https://www.r-bloggers.com/2019/06/how-to-perform-ordinal-logistic-regression-in-r/
+# and https://www.rdocumentation.org/packages/ordinal/versions/2019.12-10/topics/clmm
+
+library(GLMMadaptive)
+
+# make the response variable a factor
+sw_spat_rescale$fl_intensity_fac <- factor(sw_spat_rescale$fl_intensity, levels = c("0", "1", "2"))
+sw_spat_rescale$fr_intensity_fac <- factor(sw_spat_rescale$fr_intensity, levels = c("0", "1", "2"))
+
+# setting up the data for ordinal analysis
+cr_vals_fl <- cr_setup(sw_spat_rescale$fl_intensity_fac)
+cr_data_fl <- sw_spat_rescale[cr_vals_fl$subs, ]
+cr_data_fl$y_new <- cr_vals_fl$y
+cr_data_fl$cohort <- cr_vals_fl$cohort
+
+fl_int_mod <- mixed_model(
+  y_new ~ FNSum_PCP_cs + FNMean_MaxTemp_cs + Species_name +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs + elev_cs + slope_cs + light_cs,
+  random = ~ 1 | User_Tree_id,
+  data = cr_data_fl, family = binomial()
+)
+
+fl_int_mod
+# library(sjPlot)
+
+# setting up the data for ordinal analysis for fruiting
+cr_vals_fr <- cr_setup(sw_spat_rescale$fr_intensity_fac)
+cr_data_fr <- sw_spat_rescale[cr_vals_fr$subs, ]
+cr_data_fr$y_new <- cr_vals_fr$y
+cr_data_fr$cohort <- cr_vals_fr$cohort
+
+fr_int_mod <- mixed_model(
+  y_new ~ FNSum_PCP_cs + FNMean_MaxTemp_cs + Species_name +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs + elev_cs + slope_cs + light_cs,
+  random = ~ 1 | User_Tree_id,
+  data = cr_data_fr, family = binomial()
+)
+
+fr_int_mod
+# library(sjPlot)
+tab_model(fl_int_mod, fr_int_mod, file = "plots/fl_fr_int_mod.html")
+```
+
+```{r ordinal models for individual species}
+# ordinal models for each species separately--------------------
+
+library(MASS)
+
+library(ordinal)
+
+# cr_data_fl$Species_namefac<-factor(cr_data_fl$Species_name, levels=c("Artocarpus heterophyllus", "Mangifera indica", "Tamarindus indica"))
+
+# make the response variable a factor
+sw_spat_rescale$fl_intensity_fac <- factor(sw_spat_rescale$fl_intensity, levels = c("0", "1", "2"), ordered = T)
+sw_spat_rescale$fr_intensity_fac <- factor(sw_spat_rescale$fr_intensity, levels = c("0", "1", "2"), ordered = T)
+
+
+# Dividing data into training and test set
+# Random sampling
+
+# jack-----------------------------------
+jack <- sw_spat_rescale[sw_spat_rescale$Species_name == "Artocarpus heterophyllus" & sw_spat_rescale$is.KL2 == 1, ]
+
+samplesize <- 0.70 * nrow(jack)
+set.seed(100)
+index <- sample(seq_len(nrow(jack)), size = samplesize)
+# Creating training and test set
+jacktrain <- jack[index, ]
+jacktest <- jack[-index, ]
+
+
+# fl_int_jack_po<- clmm2(fl_intensity_fac ~ FNSum_PCP_cs+FNMean_MaxTemp_cs+
+#                          FNMean_MeanSM_cs+FNSum_DryDays_cs+elev_cs+aspect_cs+light_cs,
+#                          (1 | User_Tree_id),
+#                  data = jacktrain, Hess=T)
+
+# summary(fl_int_jack_po)
+# fl_int_jack_po
+
+ctable_jack <- coef(summary(fl_int_jack_po))
+write.csv(ctable_jack, "plots/coefs_jack_fl.csv")
+
+# p<-pnorm(abs(ctable_jack[,"t value"]), lower.tail = F)*2
+# ctable_jack<-cbind(ctable_jack, "p value"=p)
+ci <- confint(fl_int_jack_po)
+
+jacktrain$User_Tree_id <- as.factor(jacktrain$User_Tree_id)
+
+fl_inter_jack_po <- clmm2(
+  fl_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs,
+  random = User_Tree_id,
+  data = jacktrain, Hess = T
+)
+
+summary(fl_inter_jack_po)
+fl_inter_jack_po
+
+pred_jack <- predict(fl_inter_jack_po, newdata = jacktest)
+plot(jacktest$fl_intensity, pred_jack)
+
+saveRDS(fl_inter_jack_po, file = "models/fl_inter_jack_po.rds")
+```
+```{r plotting probabilities}
+library(effects)
+
+png("plots/jack_SM_aspect_effect.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNMean_MeanSM_cs", "aspect_cs"), fl_inter_jack_po), rug = T)
+dev.off()
+
+png("plots/jack_DryDays_light_effect.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNSum_DryDays_cs", "light_cs"), fl_inter_jack_po), rug = T)
+dev.off()
+
+png("plots/jack_SumPCP_elev_effect.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNSum_PCP_cs", "elev_cs"), fl_inter_jack_po), rug = T)
+dev.off()
+```
+
+{r predictions}
+
+#Solution 1----------------------
+#prediction using test data - https://gist.github.com/Martin-Jung/33ca6591193cb59f0a88
+
+# Arguments:
+#  - model = a clmm model
+#  - modelAvg = a clmm model average (object of class averaging)
+#  - newdata = a dataframe of new data to apply the model to
+# Returns a dataframe of predicted probabilities for each row and response level
+#fake.predict.clmm <- function(modelAvg, newdata) {
+fake.predict.clmm <- function(model, newdata) {
+  # Actual prediction function
+  pred <- function(eta, theta, cat = 1:(length(theta) + 1), inv.link = plogis) {
+    Theta <- c(-1000, theta, 1000)
+    sapply(cat, function(j) inv.link(Theta[j + 1] - eta) - inv.link(Theta[j] - 
+eta))
+  }
+
+  # Multiply each row by the coefficients
+  coefs <- c(model$beta, unlist(model$ST))##turn off if a model average is used
+  
+  #beta <- modelAvg$coefficients[2,3:12]
+  #coefs <- c(beta, unlist(modelAvg$ST))
+
+  xbetas <- sweep(newdata, MARGIN=2, coefs, `*`)
+
+  # Make predictions
+  #Theta<-modelAvg$coefficients[2,1:2]
+  pred.mat <- data.frame(pred(eta=rowSums(xbetas), theta=model$Theta))
+  
+  #trying
+  #pred.mat <- data.frame(pred(eta=xbetas, theta=model$Theta))
+  
+  #pred.mat <- data.frame(pred(eta=rowSums(xbetas), theta=Theta))
+  colnames(pred.mat) <- levels(model$model[,1])
+  
+  #a<-attr(modelAvg, "modelList")
+  #colnames(pred.mat) <- levels(a[[1]]$model[,1])
+
+  pred.mat
+}
+
+jack.pred<-fake.predict.clmm(fl_int_jack_po, newdata=jacktest[,match(names(coefs), colnames(jacktest))])
+
+#r-squared of prediction and test data
+plot(jacktest$fl_intensity, jack.pred)
+
+
+#Solution 2-------------------------------------------
+#https://petrilankoski.com/2013/09/20/model-comparison-with-data/
+
+library("ordinal")
+library("ggplot2")
+pred <- function(eta, theta, cat = 1:(length(theta) + 1), inv.link = plogis) {
+  Theta <- c(-1000, theta, 1000)
+  sapply(cat, function(j) inv.link(Theta[j + 1] - eta) - inv.link(Theta[j] - eta))}
+
+plot.probabilities3<-function(grid, model, comp.data=NULL, title="", ylim=NULL) {
+  co <- model$coefficients[1:length(model$y.levels)-1]
+  pre.mat <- pred(eta=rowSums(grid), theta=co)
+  df<-data.frame(levels=as.numeric(model$y.levels))
+  df["avg"] <- pre.mat[1,]
+  df["low"] <- pre.mat[2,]
+  df["high"] <- pre.mat[3,]
+  if(!is.null(comp.data)) {
+     df["freq"] <- summary(comp.data)/sum(summary(comp.data))
+  }
+  plot1 <- ggplot(data=df, aes(x=levels, y=avg)) + geom_line() + geom_point() +
+  ggtitle(title) + ylab("probability") + xlab("") +
+  geom_line(aes(x=levels, y=low), colour="#CCCCCC") +
+  geom_line(aes(x=levels, y=high), colour="#CCCCCC")
+  if(!is.null(comp.data)) {
+     plot1 <- plot1 +
+     geom_line(aes(x=levels, y=freq), lty="dotted")
+  }
+  if(!is.null(ylim)) {
+     plot1 <- plot1 + ylim(0, ylim)
+  }
+  return(plot1)
+}
+
+
+library("ggplot2")
+pred <- function(eta, theta, cat = 1:(length(theta) + 1), inv.link = plogis) {
+  Theta <- c(-1000, theta, 1000)
+  sapply(cat, function(j) inv.link(Theta[j + 1] - eta) - inv.link(Theta[j] - eta))}
+
+plot.probabilities3<-function(grid, model, comp.data=NULL, title="", ylim=NULL) {
+  co <- model$coefficients[1:length(model$y.levels)-1]
+  pre.mat <- pred(eta=rowSums(grid), theta=co)
+  df<-data.frame(levels=as.numeric(model$y.levels))
+  df["avg"] <- pre.mat[1,]
+  df["low"] <- pre.mat[2,]
+  df["high"] <- pre.mat[3,]
+  if(!is.null(comp.data)) {
+     df["freq"] <- summary(comp.data)/sum(summary(comp.data))
+  }
+  plot1 <- ggplot(data=df, aes(x=levels, y=avg)) + geom_line() + geom_point() +
+  ggtitle(title) + ylab("probability") + xlab("") +
+  geom_line(aes(x=levels, y=low), colour="#CCCCCC") +
+  geom_line(aes(x=levels, y=high), colour="#CCCCCC")
+  if(!is.null(comp.data)) {
+     plot1 <- plot1 +
+     geom_line(aes(x=levels, y=freq), lty="dotted")
+  }
+  if(!is.null(ylim)) {
+     plot1 <- plot1 + ylim(0, ylim)
+  }
+  return(plot1)
+}
+
+
+#data(wine)
+#fm2 <- clmm(rating ~ temp + contact + (1|judge), data = wine,Hess = TRUE, nAGQ = 10)
+mat_no_cold <- expand.grid(judge = qnorm(0.95) * c(0, -1, 1) * fm2$stDev, contact = c(0), temp=c(0))
+mat_yes_cold <- expand.grid(judge = qnorm(0.95) * c(0, -1, 1) * fm2$stDev, contact = c(fm2$beta[2]), temp=c(0))
+mat_no_warm <- expand.grid(judge = qnorm(0.95) * c(0, -1, 1) * fm2$stDev, contact = c(0), temp=c(fm2$beta[1]))
+mat_yes_warm <- expand.grid(judge = qnorm(0.95) * c(0, -1, 1) * fm2$stDev, contact = c(fm2$beta[2]), temp=c(fm2$beta[1]))
+
+
+jacktest2<-jacktest[complete.cases(jacktest),]
+jack.pred.plot<-plot.probabilities3(newdata, fl_int_jack_po, jacktest2$fl_intensity_fac)
+jack.pred.plot
+
+dat_no_cold.tmp<-wine[wine["contact"]=="no",]
+dat_no_cold<-dat_no_cold.tmp[dat_no_cold.tmp["temp"]=="cold",]
+plot1<-plot.probabilities3(mat_no_cold, fm2, dat_no_cold$rating, title="Contact=no,Temperature=cold")
+
+dat_yes_cold.tmp<-wine[wine["contact"]=="yes",]
+dat_yes_cold<-dat_yes_cold.tmp[dat_yes_cold.tmp["temp"]=="cold",]
+plot2<-plot.probabilities3(mat_yes_cold, fm2, dat_yes_cold$rating, title="Contact=yes,Temperature=cold")
+
+dat_no_warm.tmp<-wine[wine["contact"]=="no",]
+dat_no_warm<-dat_no_warm.tmp[dat_no_warm.tmp["temp"]=="warm",]
+plot3<-plot.probabilities3(mat_no_warm, fm2, dat_no_warm$rating, title="Contact=no,Temperature=warm")
+
+dat_yes_warm.tmp<-wine[wine["contact"]=="yes",]
+dat_yes_warm<-dat_yes_warm.tmp[dat_yes_warm.tmp["temp"]=="warm",]
+plot4<-plot.probabilities3(mat_yes_warm, fm2, dat_yes_warm$rating, title="Contact=yes,Temperature=warm")
+
+grid.arrange(plot1, plot2, plot3, plot4, ncol=2)
+
+#Solution 3------------------------------------
+
+#https://marissabarlaz.github.io/portfolio/ols/
+
+library(ggeffects)
+ggpred_jack <- data.frame(ggpredict(fl_int_jack_po, terms = c("FNSum_PCP_cs", "FNSum_DryDays_cs"), type = "fe"))
+colnames(ggpred_jack)[6]<-"fl_intensity"
+ggplot(ggpred_jack, aes(x=fl_intensity, y=predicted))+geom_point()
+
+```{r others}
+# mango------------------------------------
+mango <- sw_spat_rescale[sw_spat_rescale$Species_name == "Mangifera indica" & sw_spat_rescale$is.KL2 == 1, ]
+
+samplesize <- 0.70 * nrow(mango)
+set.seed(100)
+index <- sample(seq_len(nrow(mango)), size = samplesize)
+# Creating training and test set
+mangotrain <- mango[index, ]
+mangotest <- mango[-index, ]
+
+
+mangotrain$User_Tree_id <- as.factor(mangotrain$User_Tree_id)
+
+fl_inter_mango_po <- clmm2(
+  fl_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs,
+  random = User_Tree_id,
+  data = mangotrain, Hess = T
+)
+
+summary(fl_inter_mango_po)
+# saveRDS(fl_inter_mango_po, file="models/fl_inter_mango_po.rds")
+
+pred_mango <- predict(fl_inter_jack_po, newdata = mangotest)
+plot(mangotest$fl_intensity_fac, pred_mango)
+
+
+ctable_mango <- coef(summary(fl_int_mango_po))
+# write.csv(ctable_mango, "plots/coefs_mango_fl.csv")
+ci <- confint(fl_int_mango_po)
+
+# plots
+# png("plots/mango_SM_aspect_effect.png", width=8, height=8, res=300, units="in")
+plot(Effect(focal.predictors = c("FNMean_MeanSM_cs", "aspect_cs"), fl_inter_mango_po), rug = T)
+# dev.off()
+
+# png("plots/mango_DryDays_light_effect.png", width=8, height=8, res=300, units="in")
+plot(Effect(focal.predictors = c("FNSum_DryDays_cs", "light_cs"), fl_inter_mango_po), rug = T)
+# dev.off()
+
+# png("plots/mango_SumPCP_elev_effect.png", width=8, height=8, res=300, units="in")
+plot(Effect(focal.predictors = c("FNSum_PCP_cs", "elev_cs"), fl_inter_mango_po), rug = T)
+# dev.off()
+
+
+# tamarind----------------------
+tam <- sw_spat_rescale[sw_spat_rescale$Species_name == "Tamarindus indica" & sw_spat_rescale$is.KL2 == 1, ]
+
+samplesize <- 0.70 * nrow(tam)
+set.seed(100)
+index <- sample(seq_len(nrow(tam)), size = samplesize)
+# Creating training and test set
+tamtrain <- tam[index, ]
+tamtest <- tam[-index, ]
+
+tamtrain$User_Tree_id <- as.factor(tamtrain$User_Tree_id)
+
+fl_inter_tam_po <- clmm2(
+  fl_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs,
+  random = User_Tree_id,
+  data = tamtrain, Hess = T
+)
+
+summary(fl_inter_tam_po)
+saveRDS(fl_inter_tam_po, file = "models/fl_inter_tam_po.rds")
+
+png("plots/tam_SM_aspect_effect.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNMean_MeanSM_cs", "aspect_cs"), fl_inter_tam_po), rug = T)
+dev.off()
+
+png("plots/tam_DryDays_light_effect.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNSum_DryDays_cs", "light_cs"), fl_inter_tam_po), rug = T)
+dev.off()
+
+png("plots/tam_SumPCP_elev_effect.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNSum_PCP_cs", "elev_cs"), fl_inter_tam_po), rug = T)
+dev.off()
+
+
+
+# plots----------------
+# https://stackoverflow.com/questions/38977094/how-to-use-dotplot-after-clmm
+# https://www.rdocumentation.org/packages/ordinal/versions/2011.05-10/topics/profile.clmm
+
+all3_data <- list(jack, mango, tam)
+saveRDS(all3_data, file = "models/all3_data.rds")
+
+
+library(sjPlot)
+tab_model(fl_inter_jack_po, fl_inter_mango_po, fl_inter_tam_po, file = "plots/fl_inter_jmt_po.html")
+```
+
+
+```{r fruiting}
+# jack
+fr_inter_jack_po <- clmm2(
+  fr_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs,
+  random = User_Tree_id,
+  data = jacktrain, Hess = T
+)
+
+summary(fr_inter_jack_po)
+fr_inter_jack_po
+
+pred_jack <- predict(fr_inter_jack_po, newdata = jacktest)
+plot(jacktest$fr_intensity, pred_jack)
+
+saveRDS(fr_inter_jack_po, file = "models/fr_inter_jack_po.rds")
+
+
+png("plots/jack_SM_aspect_effect_fr.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNMean_MeanSM_cs", "aspect_cs"), fr_inter_jack_po), rug = T)
+dev.off()
+
+png("plots/jack_DryDays_light_effect_fr.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNSum_DryDays_cs", "light_cs"), fr_inter_jack_po), rug = T)
+dev.off()
+
+png("plots/jack_SumPCP_elev_effect_fr.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNSum_PCP_cs", "elev_cs"), fr_inter_jack_po), rug = T)
+dev.off()
+
+# mango
+fr_inter_mango_po <- clmm2(
+  fr_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs,
+  random = User_Tree_id,
+  data = mangotrain, Hess = T
+)
+
+summary(fr_inter_mango_po)
+
+pred_mango <- predict(fr_inter_mango_po, newdata = mangotest)
+plot(mangotest$fr_intensity, pred_mango)
+
+saveRDS(fr_inter_mango_po, file = "models/fr_inter_mango_po.rds")
+
+
+png("plots/mango_SM_aspect_effect_fr.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNMean_MeanSM_cs", "aspect_cs"), fr_inter_mango_po), rug = T)
+dev.off()
+
+png("plots/mango_DryDays_light_effect_fr.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNSum_DryDays_cs", "light_cs"), fr_inter_mango_po), rug = T)
+dev.off()
+
+png("plots/mango_SumPCP_elev_effect_fr.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNSum_PCP_cs", "elev_cs"), fr_inter_mango_po), rug = T)
+dev.off()
+
+
+# tamarind
+fr_inter_tam_po <- clmm2(
+  fr_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs,
+  random = User_Tree_id,
+  data = tamtrain, Hess = T
+)
+
+summary(fr_inter_tam_po)
+
+pred_tam <- predict(fr_inter_tam_po, newdata = tamtest)
+plot(tamtest$fr_intensity, pred_tam)
+
+saveRDS(fr_inter_tam_po, file = "models/fr_inter_tam_po.rds")
+
+
+png("plots/tam_SM_aspect_effect_fr.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNMean_MeanSM_cs", "aspect_cs"), fr_inter_tam_po), rug = T)
+dev.off()
+
+png("plots/tam_DryDays_light_effect_fr.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNSum_DryDays_cs", "light_cs"), fr_inter_tam_po), rug = T)
+dev.off()
+
+png("plots/tam_SumPCP_elev_effect_fr.png", width = 8, height = 8, res = 300, units = "in")
+plot(Effect(focal.predictors = c("FNSum_PCP_cs", "elev_cs"), fr_inter_tam_po), rug = T)
+dev.off()
+
+tab_model(fr_inter_jack_po, fr_inter_mango_po, fr_inter_tam_po, file = "plots/fr_inter_jmt_po.html")
+```
+
+```{r ordinal model predictions - fruiting and flowering}
+# figure out how to do this---------
+# the code is giving classes now, but it is giving 1/3rd as many as it should
+
+library(seqinr)
+
+jacktest.nona <- jacktest[complete.cases(jacktest), ]
+jacktest.nona <- jacktest.nona[order(jacktest.nona$Observation_ID), ]
+jacktest3 <- rbind(jacktest.nona, jacktest.nona, jacktest.nona)
+jacktest3 <- jacktest3[order(jacktest3$Observation_ID), ]
+jacktest3$fl_intensity_fac <- factor(rep(c(0:2), nrow(jacktest.nona)))
+pmat.clm <- matrix(predict(fl_inter_jack_po, newdata = jacktest3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+
+pred_jack <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+
+rjack <- round(cor(jacktest.nona$fl_intensity, pred_jack, use = "pairwise.complete.obs"), 2)
+
+
+mangotest.nona <- mangotest[complete.cases(mangotest), ]
+mangotest.nona <- mangotest.nona[order(mangotest.nona$Observation_ID), ]
+mangotest3 <- rbind(mangotest.nona, mangotest.nona, mangotest.nona)
+mangotest3 <- mangotest3[order(mangotest3$Observation_ID), ]
+mangotest3$fl_intensity_fac <- factor(rep(c(0:2), nrow(mangotest.nona)))
+pmat.clm <- matrix(predict(fl_inter_mango_po, newdata = mangotest3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+
+pred_mango <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+
+rmango <- round(cor(mangotest.nona$fl_intensity, pred_mango, use = "pairwise.complete.obs"), 2)
+
+tamtest.nona <- tamtest[complete.cases(tamtest), ]
+tamtest.nona <- tamtest.nona[order(tamtest.nona$Observation_ID), ]
+tamtest3 <- rbind(tamtest.nona, tamtest.nona, tamtest.nona)
+tamtest3 <- tamtest3[order(tamtest3$Observation_ID), ]
+tamtest3$fl_intensity_fac <- factor(rep(c(0:2), nrow(tamtest.nona)))
+pmat.clm <- matrix(predict(fl_inter_tam_po, newdata = tamtest3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+
+pred_tam <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+
+rtam <- round(cor(tamtest.nona$fl_intensity, pred_tam, use = "pairwise.complete.obs"), 2)
+
+png("plots/jmt_pred_fl_po.png", width = 12, height = 4, res = 300, units = "in")
+par(mfrow = c(1, 3))
+plot(jitter(jacktest.nona$fl_intensity), jitter(pred_jack),
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("jack\nr=", rjack, sep = ""), xlab = "test data", ylab = "predicted"
+)
+plot(jitter(mangotest.nona$fl_intensity), jitter(pred_mango),
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("mango\nr=", rmango, sep = ""), xlab = "test data", ylab = "predicted"
+)
+plot(jitter(tamtest.nona$fl_intensity), jitter(pred_tam),
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("tamarind\nr=", rtam, sep = ""), xlab = "test data", ylab = "predicted"
+)
+dev.off()
+
+# fruiting
+
+# jack
+jacktest3$fr_intensity_fac <- factor(rep(c(0:2), nrow(jacktest.nona)))
+pmat.clm <- matrix(predict(fr_inter_jack_po, newdata = jacktest3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+pred_jack <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+rjack <- round(cor(jacktest.nona$fr_intensity, pred_jack, use = "pairwise.complete.obs"), 2)
+
+# mango
+mangotest3$fr_intensity_fac <- factor(rep(c(0:2), nrow(mangotest.nona)))
+pmat.clm <- matrix(predict(fr_inter_mango_po, newdata = mangotest3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+pred_mango <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+rmango <- round(cor(mangotest.nona$fr_intensity, pred_mango, use = "pairwise.complete.obs"), 2)
+
+# tamarind
+tamtest3$fr_intensity_fac <- factor(rep(c(0:2), nrow(tamtest.nona)))
+pmat.clm <- matrix(predict(fr_inter_tam_po, newdata = tamtest3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+pred_tam <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+rtam <- round(cor(tamtest.nona$fr_intensity, pred_tam, use = "pairwise.complete.obs"), 2)
+
+png("plots/jmt_pred_fr_po.png", width = 12, height = 4, res = 300, units = "in")
+par(mfrow = c(1, 3))
+plot(jitter(jacktest.nona$fr_intensity), jitter(pred_jack),
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("jack\nr=", rjack, sep = ""), xlab = "test data", ylab = "predicted"
+)
+plot(jitter(mangotest.nona$fr_intensity), jitter(pred_mango),
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("mango\nr=", rmango, sep = ""), xlab = "test data", ylab = "predicted"
+)
+plot(jitter(tamtest.nona$fr_intensity), jitter(pred_tam),
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("tamarind\nr=", rtam, sep = ""), xlab = "test data", ylab = "predicted"
+)
+dev.off()
+```
+
+```{r jack ordinal LOOCV}
+yr <- unique(jack$year)
+jack.ord.ests_fl <- data.frame(matrix(0, nrow = 12, ncol = 9))
+jack.ord.std.er_fl <- data.frame(matrix(0, nrow = 12, ncol = 9))
+jack.ord.ests_fr <- data.frame(matrix(0, nrow = 12, ncol = 9))
+jack.ord.std.er_fr <- data.frame(matrix(0, nrow = 12, ncol = 9))
+jack.ord.mse.fl <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9), p_val = rep(0, 9))
+jack.ord.mse.fr <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9), p_val = rep(0, 9))
+
+library(ordinal)
+i <- 1
+for (i in 1:length(yr)) {
+  dat <- jack[which(jack$year != yr[i]), ]
+  test <- jack[which(jack$year == yr[i]), ]
+  dat$User_Tree_id <- as.factor(dat$User_Tree_id)
+  fl_inter_jack_po_loocv <- clmm2(
+    fl_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs,
+    random = User_Tree_id,
+    data = dat, Hess = T, control = clmm2.control("nlminb")
+  )
+
+  saveRDS(fl_inter_jack_po_loocv, paste0("models/loocv/jack.ord.ests_fl_", yr[i], ".rds"))
+
+
+  jack.ord.ests_fl[, i] <- coef(summary(fl_inter_jack_po_loocv))[, 1]
+  jack.ord.std.er_fl[, i] <- coef(summary(fl_inter_jack_po_loocv))[, 2]
+
+  test.nona <- test[complete.cases(test), ]
+  test.nona <- test.nona[order(test.nona$Observation_ID), ]
+  test3 <- rbind(test.nona, test.nona, test.nona)
+  test3 <- test3[order(test3$Observation_ID), ]
+  test3$fl_intensity_fac <- factor(rep(c(0:2), nrow(test.nona)))
+  pmat.clm <- matrix(predict(fl_inter_jack_po_loocv, newdata = test3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+
+  pred_fl <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+
+  rjack <- round(cor(test.nona$fl_intensity, pred_fl, use = "pairwise.complete.obs"), 2)
+
+
+  jack.ord.mse.fl[i, 2] <- mean((test.nona$fl_intensity - pred_fl)^2, na.rm = T)
+  jack.ord.mse.fl[i, 3] <- cor.test(test.nona$fl_intensity, pred_fl, use = "complete.obs")[[4]] # correlation value
+  jack.ord.mse.fl[i, 4] <- cor.test(test.nona$fl_intensity, pred_fl, use = "complete.obs")[[3]] # p-value
+
+
+  write.csv(jack.ord.ests_fl, "models/loocv/jack.ord.ests_fl.csv")
+  write.csv(jack.ord.std.er_fl, "models/loocv/jack.ord.std.er_fl.csv")
+  write.csv(jack.ord.mse.fl, "models/loocv/jack.ord.mse.fl.csv")
+
+  fr_inter_jack_po_loocv <- clmm2(
+    fr_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs,
+    random = User_Tree_id,
+    data = dat, Hess = T, control = clmm2.control("nlminb")
+  )
+  saveRDS(fr_inter_jack_po_loocv, paste0("models/loocv/jack.ord.ests_fr_", yr[i], ".rds"))
+
+  jack.ord.ests_fr[, i] <- coef(summary(fr_inter_jack_po_loocv))[, 1]
+  jack.ord.std.er_fr[, i] <- coef(summary(fr_inter_jack_po_loocv))[, 2]
+
+  test3$fr_intensity_fac <- factor(rep(c(0:2), nrow(test.nona)))
+  pmat.clm <- matrix(predict(fr_inter_jack_po_loocv, newdata = test3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+
+  pred_fr <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+
+  jack.ord.mse.fr[i, 2] <- mean((test.nona$fr_intensity - pred_fr)^2, na.rm = T)
+  jack.ord.mse.fr[i, 3] <- cor(test.nona$fr_intensity, pred_fr, use = "complete.obs")[[4]] # correlation
+  jack.ord.mse.fr[i, 4] <- cor.test(test.nona$fr_intensity, pred_fr, use = "complete.obs")[[3]] # p-value
+
+  write.csv(jack.ord.ests_fr, "models/loocv/jack.ord.ests_fr.csv")
+  write.csv(jack.ord.std.er_fr, "models/loocv/jack.ord.std.er_fr.csv")
+  write.csv(jack.ord.mse.fr, "models/loocv/jack.ord.mse.fr.csv")
+}
+
+colnames(jack.ord.ests_fl) <- colnames(jack.ord.ests_fr) <- colnames(jack.ord.std.er_fl) <- colnames(jack.ord.std.er_fr) <- yr
+row.names(jack.ord.ests_fl) <- row.names(jack.ord.ests_fr) <- row.names(jack.ord.std.er_fl) <- row.names(jack.ord.std.er_fr) <- row.names(coef(summary(fr_inter_jack_po_loocv)))
+
+write.csv(jack.ord.ests_fl, "models/jack.ord.ests_fl.csv")
+write.csv(jack.ord.std.er_fl, "models/jack.ord.std.er_fl.csv")
+write.csv(jack.ord.mse.fl, "models/jack.ord.mse.fl.csv")
+
+write.csv(jack.ord.ests_fr, "models/jack.ord.ests_fr.csv")
+write.csv(jack.ord.std.er_fr, "models/jack.ord.std.er_fr.csv")
+write.csv(jack.ord.mse.fr, "models/jack.ord.mse.fr.csv")
+```
+
+```{r mango ordinal LOOCV}
+yr <- unique(mango$year)
+mango.ord.ests_fl <- data.frame(matrix(0, nrow = 12, ncol = 9))
+mango.ord.std.er_fl <- data.frame(matrix(0, nrow = 12, ncol = 9))
+mango.ord.ests_fr <- data.frame(matrix(0, nrow = 12, ncol = 9))
+mango.ord.std.er_fr <- data.frame(matrix(0, nrow = 12, ncol = 9))
+mango.ord.mse.fl <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9))
+mango.ord.mse.fr <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9))
+
+library(ordinal)
+i <- 9
+for (i in 1:length(yr)) {
+  dat <- mango[which(mango$year != yr[i]), ]
+  test <- mango[which(mango$year == yr[i]), ]
+  dat$User_Tree_id <- as.factor(dat$User_Tree_id)
+  fl_inter_mango_po_loocv <- clmm2(
+    fl_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs,
+    random = User_Tree_id,
+    data = dat, Hess = T, control = clmm2.control("nlminb")
+  )
+
+
+
+  mango.ord.ests_fl[, i] <- coef(summary(fl_inter_mango_po_loocv))[, 1]
+  mango.ord.std.er_fl[, i] <- coef(summary(fl_inter_mango_po_loocv))[, 2]
+
+  test.nona <- test[complete.cases(test), ]
+  test.nona <- test.nona[order(test.nona$Observation_ID), ]
+  test3 <- rbind(test.nona, test.nona, test.nona)
+  test3 <- test3[order(test3$Observation_ID), ]
+  test3$fl_intensity_fac <- factor(rep(c(0:2), nrow(test.nona)))
+  pmat.clm <- matrix(predict(fl_inter_mango_po_loocv, newdata = test3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+
+  pred_fl <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+
+  rmango <- round(cor(test.nona$fl_intensity, pred_fl, use = "pairwise.complete.obs"), 2)
+
+
+  mango.ord.mse.fl[i, 2] <- mean((test.nona$fl_intensity - pred_fl)^2, na.rm = T)
+  mango.ord.mse.fl[i, 3] <- cor(test.nona$fl_intensity, pred_fl, use = "complete.obs")
+
+  write.csv(mango.ord.ests_fl, "models/mango.ord.ests_fl.csv")
+  write.csv(mango.ord.std.er_fl, "models/mango.ord.std.er_fl.csv")
+  write.csv(mango.ord.mse.fl, "models/mango.ord.mse.fl.csv")
+
+  fr_inter_mango_po_loocv <- clmm2(
+    fr_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs,
+    random = User_Tree_id,
+    data = dat, Hess = T, control = clmm2.control("nlminb")
+  )
+
+  mango.ord.ests_fr[, i] <- coef(summary(fr_inter_mango_po_loocv))[, 1]
+  mango.ord.std.er_fr[, i] <- coef(summary(fr_inter_mango_po_loocv))[, 2]
+
+  test3$fr_intensity_fac <- factor(rep(c(0:2), nrow(test.nona)))
+  pmat.clm <- matrix(predict(fr_inter_mango_po_loocv, newdata = test3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+
+  pred_fr <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+
+  mango.ord.mse.fr[i, 2] <- mean((test.nona$fr_intensity - pred_fr)^2, na.rm = T)
+  mango.ord.mse.fr[i, 3] <- cor(test.nona$fr_intensity, pred_fr, use = "complete.obs")
+
+  write.csv(mango.ord.ests_fr, "models/mango.ord.ests_fr.csv")
+  write.csv(mango.ord.std.er_fr, "models/mango.ord.std.er_fr.csv")
+  write.csv(mango.ord.mse.fr, "models/mango.ord.mse.fr.csv")
+}
+
+colnames(mango.ord.ests_fl) <- colnames(mango.ord.ests_fr) <- colnames(mango.ord.std.er_fl) <- colnames(mango.ord.std.er_fr) <- yr
+row.names(mango.ord.ests_fl) <- row.names(mango.ord.ests_fr) <- row.names(mango.ord.std.er_fl) <- row.names(mango.ord.std.er_fr) <- row.names(coef(summary(fr_inter_mango_po_loocv)))
+
+write.csv(mango.ord.ests_fl, "models/mango.ord.ests_fl.csv")
+write.csv(mango.ord.std.er_fl, "models/mango.ord.std.er_fl.csv")
+write.csv(mango.ord.mse.fl, "models/mango.ord.mse.fl.csv")
+
+write.csv(mango.ord.ests_fr, "models/mango.ord.ests_fr.csv")
+write.csv(mango.ord.std.er_fr, "models/mango.ord.std.er_fr.csv")
+write.csv(mango.ord.mse.fr, "models/mango.ord.mse.fr.csv")
+```
+
+```{r tamarind ordinal LOOCV}
+yr <- unique(tam$year)
+tam.ord.ests_fl <- data.frame(matrix(0, nrow = 12, ncol = 9))
+tam.ord.std.er_fl <- data.frame(matrix(0, nrow = 12, ncol = 9))
+tam.ord.ests_fr <- data.frame(matrix(0, nrow = 12, ncol = 9))
+tam.ord.std.er_fr <- data.frame(matrix(0, nrow = 12, ncol = 9))
+tam.ord.mse.fl <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9))
+tam.ord.mse.fr <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9))
+
+library(ordinal)
+i <- 1
+for (i in 1:length(yr)) {
+  dat <- tam[which(tam$year != yr[i]), ]
+  test <- tam[which(tam$year == yr[i]), ]
+  dat$User_Tree_id <- as.factor(dat$User_Tree_id)
+  fl_inter_tam_po_loocv <- clmm2(
+    fl_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs,
+    random = User_Tree_id,
+    data = dat, Hess = T, control = clmm2.control("nlminb")
+  )
+
+
+
+  tam.ord.ests_fl[, i] <- coef(summary(fl_inter_tam_po_loocv))[, 1]
+  tam.ord.std.er_fl[, i] <- coef(summary(fl_inter_tam_po_loocv))[, 2]
+
+  test.nona <- test[complete.cases(test), ]
+  test.nona <- test.nona[order(test.nona$Observation_ID), ]
+  test3 <- rbind(test.nona, test.nona, test.nona)
+  test3 <- test3[order(test3$Observation_ID), ]
+  test3$fl_intensity_fac <- factor(rep(c(0:2), nrow(test.nona)))
+  pmat.clm <- matrix(predict(fl_inter_tam_po_loocv, newdata = test3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+
+  pred_fl <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+
+  rtam <- round(cor(test.nona$fl_intensity, pred_fl, use = "pairwise.complete.obs"), 2)
+
+
+
+  tam.ord.mse.fl[i, 2] <- mean((test.nona$fl_intensity - pred_fl)^2, na.rm = T)
+  tam.mse.fl[i, 3] <- cor(test.nona$fl_intensity, pred_fl, use = "complete.obs")
+
+  fr_inter_tam_po_loocv <- clmm2(
+    fr_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs,
+    random = User_Tree_id,
+    data = dat, Hess = T, control = clmm2.control("nlminb")
+  )
+
+  tam.bin.ests_fr[, i] <- coef(summary(fr_inter_tam_bin_loocv))[, 1]
+  tam.bin.std.er_fr[, i] <- coef(summary(fr_inter_tam_bin_loocv))[, 2]
+
+  test3$fr_intensity_fac <- factor(rep(c(0:2), nrow(test.nona)))
+  pmat.clm <- matrix(predict(fr_inter_tam_po_loocv, newdata = test3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+
+  pred_fr <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+
+  tam.ord.mse.fr[i, 2] <- mean((test.nona$fr_intensity - pred_fr)^2, na.rm = T)
+  tam.mse.fr[i, 3] <- cor(test.nona$fr_intensity, pred_fr, use = "complete.obs")
+}
+
+colnames(tam.ord.ests_fl) <- colnames(tam.ord.ests_fr) <- colnames(tam.ord.std.er_fl) <- colnames(tam.ord.std.er_fr) <- yr
+row.names(tam.ord.ests_fl) <- row.names(tam.ord.ests_fr) <- row.names(tam.ord.std.er_fl) <- row.names(tam.ord.std.er_fr) <- row.names(coef(summary(fr_inter_tam_po_loocv)))
+
+write.csv(tam.ord.ests_fl, "models/tam.ord.ests_fl.csv")
+write.csv(tam.ord.ests_fr, "models/tam.ord.ests_fr.csv")
+write.csv(tam.ord.std.er_fl, "models/tam.ord.std.er_fl.csv")
+write.csv(tam.ord.std.er_fr, "models/tam.ord.std.er_fr.csv")
+write.csv(tam.ord.mse.fl, "models/tam.ord.mse.fl.csv")
+write.csv(tam.ord.mse.fr, "models/tam.ord.mse.fr.csv")
+```
+
+```{r only tam fruiting}
+i <- 2
+for (i in 1:length(yr)) {
+  dat <- tam[which(tam$year != yr[i]), ]
+  test <- tam[which(tam$year == yr[i]), ]
+  dat$User_Tree_id <- as.factor(dat$User_Tree_id)
+  test.nona <- test[complete.cases(test), ]
+  test.nona <- test.nona[order(test.nona$Observation_ID), ]
+  test3 <- rbind(test.nona, test.nona, test.nona)
+  test3 <- test3[order(test3$Observation_ID), ]
+
+  fr_inter_tam_po_loocv <- clmm2(
+    fr_intensity_fac ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs,
+    random = User_Tree_id,
+    data = dat, Hess = T, control = clmm2.control("nlminb")
+  )
+
+  tam.ord.ests_fr[, i] <- coef(summary(fr_inter_tam_po_loocv))[, 1]
+  tam.ord.std.er_fr[, i] <- coef(summary(fr_inter_tam_po_loocv))[, 2]
+
+  test3$fr_intensity_fac <- factor(rep(c(0:2), nrow(test.nona)))
+  pmat.clm <- matrix(predict(fr_inter_tam_po_loocv, newdata = test3, allow.new.levels = T), ncol = 3, byrow = TRUE)
+
+  pred_fr <- as.numeric(unlist(apply(as.data.frame(pmat.clm), 1, which.max))) - 1
+
+  tam.ord.mse.fr[i, 2] <- mean((test.nona$fr_intensity - pred_fr)^2, na.rm = T)
+  tam.ord.mse.fr[i, 3] <- cor(test.nona$fr_intensity, pred_fr, use = "complete.obs")
+}
+
+colnames(tam.ord.ests_fr) <- colnames(tam.ord.std.er_fr) <- yr
+row.names(tam.ord.ests_fr) <- row.names(tam.ord.std.er_fr) <- row.names(coef(summary(fr_inter_tam_po_loocv)))
+
+write.csv(tam.ord.ests_fr, "models/tam.ord.ests_fr.csv")
+write.csv(tam.ord.std.er_fr, "models/tam.ord.std.er_fr.csv")
+write.csv(tam.ord.mse.fr, "models/tam.ord.mse.fr.csv")
+```
+
+```{r [SUPP] fruiting with flowering as predictor}
+library(dplyr)
+jack$User_Tree_id_ch <- as.character(jack$User_Tree_id)
+jack_fl_tmin1 <- mutate(jack, group_by(User_Tree_id_ch),
+  fl_tmin1 = lag(fl_intensity, n = 1, default = NA)
+)
+
+jack$week <- week(jack$Date)
+library(lubridate)
+jack_fl_tmin1 <-
+  jack %>%
+  group_by(User_Tree_id_ch) %>%
+  mutate(
+    fl_tmin1 = dplyr::lag(fl_intensity, n = 1, default = NA),
+    diff = week - lag(week, n = 1, default = NA)
+  )
+
+jack$fort <- ceiling(week(jack$Date) / 2)
+jack_fl_tmin1_2 <- aggregate(fl_intensity ~ year + fort + User_Tree_id, jack, mean)
+```
+
+```{r binary models flowering}
+library(lme4)
+# jack
+fl_inter_jack_bin <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+  family = binomial, data = jacktrain
+)
+
+summary(fl_inter_jack_bin)
+fl_inter_jack_bin
+
+colnames(jacktest)
+jacktest2 <- jacktest[, c(5, 8, 12, 42:49)]
+
+
+
+saveRDS(fl_inter_jack_bin, file = "models/fl_inter_jack_bin.rds")
+
+library(sjPlot)
+library(patchwork)
+
+p1 <- plot_model(fl_inter_jack_bin, type = "est", show.values = T, show.p = T)
+# plot_model(fl_inter_jack_bin, type="eff", transform, show.data = T)
+p2 <- plot_model(fl_inter_jack_bin, type = "eff", terms = c("FNSum_PCP_cs", "elev_cs"), transform, show.data = T)
+p3 <- plot_model(fl_inter_jack_bin, type = "eff", terms = c("FNMean_MeanSM_cs", "aspect_cs"), transform, show.data = T)
+p4 <- plot_model(fl_inter_jack_bin, type = "eff", terms = c("FNSum_DryDays_cs", "light_cs"), transform, show.data = T)
+
+png("plots/jack_bin_est_eff.png", width = 12, height = 8, res = 300, units = "in")
+p1 + p2 + p3 + p4
+dev.off()
+
+# mango
+fl_inter_mango_bin <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+  family = binomial, data = mangotrain
+)
+
+summary(fl_inter_mango_bin)
+
+pred_mango <- predict(fl_inter_mango_bin, newdata = mangotest)
+plot(mangotest$fl_binary, pred_mango)
+
+saveRDS(fl_inter_mango_bin, file = "models/fl_inter_mango_bin.rds")
+
+
+p1 <- plot_model(fl_inter_mango_bin, type = "est", show.values = T, show.p = T)
+# plot_model(fl_inter_jack_bin, type="eff", transform, show.data = T)
+p2 <- plot_model(fl_inter_mango_bin, type = "eff", terms = c("FNSum_PCP_cs", "elev_cs"), transform, show.data = T)
+p3 <- plot_model(fl_inter_mango_bin, type = "eff", terms = c("FNMean_MeanSM_cs", "aspect_cs"), transform, show.data = T)
+p4 <- plot_model(fl_inter_mango_bin, type = "eff", terms = c("FNSum_DryDays_cs", "light_cs"), transform, show.data = T)
+
+png("plots/mango_bin_est_eff.png", width = 12, height = 8, res = 300, units = "in")
+p1 + p2 + p3 + p4
+dev.off()
+
+# tamarind
+fl_inter_tam_bin <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+  family = binomial, data = tamtrain,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+summary(fl_inter_tam_bin)
+
+pred_tam <- predict(fl_inter_tam_bin, newdata = tamtest)
+plot(tamtest$fl_binary, pred_tam)
+
+saveRDS(fl_inter_tam_bin, file = "models/fl_inter_tam_bin.rds")
+
+
+p1 <- plot_model(fl_inter_tam_bin, type = "est", show.values = T, show.p = T)
+# plot_model(fl_inter_jack_bin, type="eff", transform, show.data = T)
+p2 <- plot_model(fl_inter_tam_bin, type = "eff", terms = c("FNSum_PCP_cs", "elev_cs"), transform, show.data = T)
+p3 <- plot_model(fl_inter_tam_bin, type = "eff", terms = c("FNMean_MeanSM_cs", "aspect_cs"), transform, show.data = T)
+p4 <- plot_model(fl_inter_tam_bin, type = "eff", terms = c("FNSum_DryDays_cs", "light_cs"), transform, show.data = T)
+
+png("plots/tam_bin_est_eff.png", width = 12, height = 8, res = 300, units = "in")
+p1 + p2 + p3 + p4
+dev.off()
+
+tab_model(fl_inter_jack_bin, fl_inter_mango_bin, fl_inter_tam_bin, file = "plots/fl_inter_jmt_bin.html")
+```
+
+```{r LOOCV for jackfruit}
+library(lme4)
+yr <- unique(jack$year)
+jack.bin.ests_fl <- data.frame(matrix(0, nrow = 11, ncol = 9))
+jack.bin.std.er_fl <- data.frame(matrix(0, nrow = 11, ncol = 9))
+jack.bin.ests_fr <- data.frame(matrix(0, nrow = 11, ncol = 9))
+jack.bin.std.er_fr <- data.frame(matrix(0, nrow = 11, ncol = 9))
+jack.mse.fl <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9))
+jack.mse.fr <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9))
+
+
+for (i in 1:length(yr)) {
+  dat <- jack[which(jack$year != yr[i]), ]
+  test <- jack[which(jack$year == yr[i]), ]
+  fl_inter_jack_bin_loocv <- glmer(
+    fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+    family = binomial, data = dat,
+    glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+
+  saveRDS(fl_inter_jack_bin_loocv, file = paste0("models/loocv/fl_inter_jack_bin_loocv_", i, ".rds"))
+
+  # jack.bin.ests_fl[,i]<-coef(summary(fl_inter_jack_bin_loocv))[,1]
+  # jack.bin.std.er_fl[,i]<-coef(summary(fl_inter_jack_bin_loocv))[,2]
+  # pred.fl<-plogis(predict(fl_inter_jack_bin_loocv, newdata=test, allow.new.levels=T))
+  # jack.mse.fl[i,2]<-mean((test$fl_binary-pred.fl)^2, na.rm=T)
+  # jack.mse.fl[i,3]<-cor(test$fl_binary, pred.fl, use="complete.obs")
+
+  fr_inter_jack_bin_loocv <- glmer(
+    fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+    family = binomial, data = dat,
+    glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+
+  saveRDS(fr_inter_jack_bin_loocv, file = paste0("models/loocv/fr_inter_jack_bin_loocv_", i, ".rds"))
+
+
+  # jack.bin.ests_fr[,i]<-coef(summary(fr_inter_jack_bin_loocv))[,1]
+  # jack.bin.std.er_fr[,i]<-coef(summary(fr_inter_jack_bin_loocv))[,2]
+  # pred.fr<-plogis(predict(fr_inter_jack_bin_loocv, newdata=test, allow.new.levels=T))
+  # jack.mse.fr[i,2]<-mean((test$fr_binary-pred.fr)^2, na.rm=T)
+  # jack.mse.fr[i,3]<-cor(test$fr_binary, pred.fr, use="complete.obs")
+}
+
+colnames(jack.bin.ests_fl) <- colnames(jack.bin.ests_fr) <- colnames(jack.bin.std.er_fl) <- colnames(jack.bin.std.er_fr) <- yr
+row.names(jack.bin.ests_fl) <- row.names(jack.bin.ests_fr) <- row.names(jack.bin.std.er_fl) <- row.names(jack.bin.std.er_fr) <- row.names(coef(summary(fr_inter_jack_bin_loocv)))
+
+write.csv(jack.bin.ests_fl, "models/jack.bin.ests_fl.csv")
+write.csv(jack.bin.ests_fr, "models/jack.bin.ests_fr.csv")
+write.csv(jack.bin.std.er_fl, "models/jack.bin.std.er_fl.csv")
+write.csv(jack.bin.std.er_fr, "models/jack.bin.std.er_fr.csv")
+write.csv(jack.mse.fl, "models/jack.mse.fl.csv")
+write.csv(jack.mse.fr, "models/jack.mse.fr.csv")
+```
+
+
+```{r LOOCV for mango}
+yr <- unique(mango$year)
+mango.bin.ests_fl <- data.frame(matrix(0, nrow = 11, ncol = 9))
+mango.bin.std.er_fl <- data.frame(matrix(0, nrow = 11, ncol = 9))
+mango.bin.ests_fr <- data.frame(matrix(0, nrow = 11, ncol = 9))
+mango.bin.std.er_fr <- data.frame(matrix(0, nrow = 11, ncol = 9))
+mango.mse.fl <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9))
+mango.mse.fr <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9))
+
+i <- 1
+for (i in 1:length(yr)) {
+  dat <- mango[which(mango$year != yr[i]), ]
+  test <- mango[which(mango$year == yr[i]), ]
+  fl_inter_mango_bin_loocv <- glmer(
+    fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+    family = binomial, data = dat, glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+  saveRDS(fl_inter_mango_bin_loocv, file = paste0("models/loocv/fl_inter_mango_bin_loocv_", i, ".rds"))
+
+  # mango.bin.ests_fl[,i]<-coef(summary(fl_inter_mango_bin_loocv))[,1]
+  # mango.bin.std.er_fl[,i]<-coef(summary(fl_inter_mango_bin_loocv))[,2]
+  # pred.fl<-plogis(predict(fl_inter_mango_bin_loocv, newdata=test, allow.new.levels=T))
+  # mango.mse.fl[i,2]<-mean((test$fl_binary-pred.fl)^2, na.rm=T)
+  # mango.mse.fl[i,3]<-cor(test$fl_binary, pred.fl, use="complete.obs")
+
+
+  fr_inter_mango_bin_loocv <- glmer(
+    fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+    family = binomial, data = dat,
+    glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+  saveRDS(fr_inter_mango_bin_loocv, file = paste0("models/loocv/fr_inter_mango_bin_loocv_", i, ".rds"))
+
+  # mango.bin.ests_fr[,i]<-coef(summary(fr_inter_mango_bin_loocv))[,1]
+  # mango.bin.std.er_fr[,i]<-coef(summary(fr_inter_mango_bin_loocv))[,2]
+  # pred.fr<-plogis(predict(fr_inter_mango_bin_loocv, newdata=test, allow.new.levels=T))
+  # mango.mse.fr[i,2]<-mean((test$fr_binary-pred.fr)^2, na.rm=T)
+  # mango.mse.fr[i,3]<-cor(test$fr_binary, pred.fr, use="complete.obs")
+}
+
+colnames(mango.bin.ests_fl) <- colnames(mango.bin.ests_fr) <- colnames(mango.bin.std.er_fl) <- colnames(mango.bin.std.er_fr) <- yr
+row.names(mango.bin.ests_fl) <- row.names(mango.bin.ests_fr) <- row.names(mango.bin.std.er_fl) <- row.names(mango.bin.std.er_fr) <- row.names(coef(summary(fr_inter_mango_bin_loocv)))
+
+write.csv(mango.bin.ests_fl, "models/mango.bin.ests_fl.csv")
+write.csv(mango.bin.ests_fr, "models/mango.bin.ests_fr.csv")
+write.csv(mango.bin.std.er_fl, "models/mango.bin.std.er_fl.csv")
+write.csv(mango.bin.std.er_fr, "models/mango.bin.std.er_fr.csv")
+write.csv(mango.mse.fl, "models/mango.mse.fl.csv")
+write.csv(mango.mse.fr, "models/mango.mse.fr.csv")
+```
+
+```{r LOOCV for tam}
+yr <- unique(tam$year)
+tam.bin.ests_fl <- data.frame(matrix(0, nrow = 11, ncol = 9))
+tam.bin.std.er_fl <- data.frame(matrix(0, nrow = 11, ncol = 9))
+tam.bin.ests_fr <- data.frame(matrix(0, nrow = 11, ncol = 9))
+tam.bin.std.er_fr <- data.frame(matrix(0, nrow = 11, ncol = 9))
+tam.mse.fl <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9))
+tam.mse.fr <- data.frame(yr, mse = rep(0, 9), cor = rep(0, 9))
+
+i <- 1
+for (i in 1:length(yr)) {
+  dat <- tam[which(tam$year != yr[i]), ]
+  test <- tam[which(tam$year == yr[i]), ]
+  fl_inter_tam_bin_loocv <- glmer(
+    fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+    family = binomial, data = dat,
+    glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+  saveRDS(fl_inter_tam_bin_loocv, file = paste0("models/loocv/fl_inter_tam_bin_loocv_", i, ".rds"))
+
+  # tam.bin.ests_fl[,i]<-coef(summary(fl_inter_tam_bin_loocv))[,1]
+  # tam.bin.std.er_fl[,i]<-coef(summary(fl_inter_tam_bin_loocv))[,2]
+
+  # pred.fl<-plogis(predict(fl_inter_tam_bin_loocv, newdata=test, allow.new.levels=T))
+  # tam.mse.fl[i,2]<-mean((test$fl_binary-pred.fl)^2, na.rm=T)
+  # tam.mse.fl[i,3]<-cor(test$fl_binary, pred.fl, use="complete.obs")
+
+  fr_inter_tam_bin_loocv <- glmer(
+    fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+      FNMean_MeanSM_cs + FNSum_DryDays_cs +
+      elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+      light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+    family = binomial, data = dat,
+    glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+  )
+  saveRDS(fr_inter_tam_bin_loocv, file = paste0("models/loocv/fr_inter_tam_bin_loocv_", i, ".rds"))
+
+  # tam.bin.ests_fr[,i]<-coef(summary(fr_inter_tam_bin_loocv))[,1]
+  # tam.bin.std.er_fr[,i]<-coef(summary(fr_inter_tam_bin_loocv))[,2]
+
+  # pred.fr<-plogis(predict(fr_inter_tam_bin_loocv, newdata=test, allow.new.levels=T))
+  # tam.mse.fr[i,2]<-mean((test$fr_binary-pred.fr)^2, na.rm=T)
+  # tam.mse.fr[i,3]<-cor(test$fr_binary, pred.fr, use="complete.obs")
+}
+
+colnames(tam.bin.ests_fl) <- colnames(tam.bin.ests_fr) <- colnames(tam.bin.std.er_fl) <- colnames(tam.bin.std.er_fr) <- yr
+row.names(tam.bin.ests_fl) <- row.names(tam.bin.ests_fr) <- row.names(tam.bin.std.er_fl) <- row.names(tam.bin.std.er_fr) <- row.names(coef(summary(fr_inter_tam_bin_loocv)))
+
+write.csv(tam.bin.ests_fl, "models/tam.bin.ests_fl.csv")
+write.csv(tam.bin.ests_fr, "models/tam.bin.ests_fr.csv")
+write.csv(tam.bin.std.er_fl, "models/tam.bin.std.er_fl.csv")
+write.csv(tam.bin.std.er_fr, "models/tam.bin.std.er_fr.csv")
+write.csv(tam.mse.fl, "models/tam.mse.fl.csv")
+write.csv(tam.mse.fr, "models/tam.mse.fr.csv")
+```
+
+```{r cross validation from the models}
+cv.fn <- function(glmfit, dat, ests) {
+  preds <- sum(ests * dat)
+}
+```
+
+```{r calculating f1 scores}
+all3_data <- readRDS("models/all3_data.rds")
+
+# calculate predicted values
+library(lme4)
+
+jack <- all3_data[[1]]
+mango <- all3_data[[2]]
+tam <- all3_data[[3]]
+
+# jack flowering
+
+fl_jack_name <- list.files("models/loocv/", "fl_inter_jack_bin_loocv_", full.names = T)
+fl_jack <- mapply(function(x) readRDS(fl_jack_name[x]), x = 1:9)
+
+pred.jack.fl <- unlist(mapply(function(x) plogis(predict(fl_jack[[x]], newdata = jack[which(jack$year == (x + 2013)), ], allow.new.levels = T)), x = 1:9))
+pred.jack.fl2 <- ifelse(pred.jack.fl > 0.5, 1, 0)
+obs.jack.fl <- unlist(mapply(function(x) jack$fl_binary[which(jack$year == x + 2013)], x = 1:9))
+
+fl.acc <- rep(NA, length(obs.jack.fl))
+fl.acc[which(pred.jack.fl2 == 1 & obs.jack.fl == 1)] <- "TP"
+fl.acc[which(pred.jack.fl2 == 0 & obs.jack.fl == 0)] <- "TN"
+fl.acc[which(pred.jack.fl2 == 0 & obs.jack.fl == 1)] <- "FN"
+fl.acc[which(pred.jack.fl2 == 1 & obs.jack.fl == 0)] <- "FP"
+
+# F1 score is 2*(precision*recall)/(precision+recall)
+# precision = TP/(TP+FP)
+# recall = TP/ (TP+FN)
+
+fl.precision <- table(fl.acc)[4] / (table(fl.acc)[4] + table(fl.acc)[2])
+fl.recall <- table(fl.acc)[4] / (table(fl.acc)[4] + table(fl.acc)[1])
+
+fl.jack.f1 <- 2 * (fl.precision * fl.recall) / (fl.precision + fl.recall)
+
+# jack fruiting
+fr_jack_name <- list.files("models/loocv/", "fr_inter_jack_bin_loocv_", full.names = T)
+fr_jack <- mapply(function(x) readRDS(fr_jack_name[x]), x = 1:9)
+
+pred.jack.fr <- unlist(mapply(function(x) plogis(predict(fr_jack[[x]], newdata = jack[which(jack$year == (x + 2013)), ], allow.new.levels = T)), x = 1:9))
+pred.jack.fr2 <- ifelse(pred.jack.fr > 0.5, 1, 0)
+obs.jack.fr <- unlist(mapply(function(x) jack$fr_binary[which(jack$year == x + 2013)], x = 1:9))
+
+fr.acc <- rep(NA, length(obs.jack.fr))
+fr.acc[which(pred.jack.fr2 == 1 & obs.jack.fr == 1)] <- "TP"
+fr.acc[which(pred.jack.fr2 == 0 & obs.jack.fr == 0)] <- "TN"
+fr.acc[which(pred.jack.fr2 == 0 & obs.jack.fr == 1)] <- "FN"
+fr.acc[which(pred.jack.fr2 == 1 & obs.jack.fr == 0)] <- "FP"
+
+# F1 score is 2*(precision*recall)/(precision+recall)
+# precision = TP/(TP+FP)
+# recall = TP/ (TP+FN)
+
+fr.precision <- table(fr.acc)[4] / (table(fr.acc)[4] + table(fr.acc)[2])
+fr.recall <- table(fr.acc)[4] / (table(fr.acc)[4] + table(fr.acc)[1])
+
+fr.jack.f1 <- 2 * (fr.precision * fr.recall) / (fr.precision + fr.recall)
+
+
+# mango flowering
+
+fl_mango_name <- list.files("models/loocv/", "fl_inter_mango_bin_loocv_", full.names = T)
+fl_mango <- mapply(function(x) readRDS(fl_mango_name[x]), x = 1:9)
+
+pred.mango.fl <- unlist(mapply(function(x) plogis(predict(fl_mango[[x]], newdata = mango[which(mango$year == (x + 2013)), ], allow.new.levels = T)), x = 1:9))
+pred.mango.fl2 <- ifelse(pred.mango.fl > 0.5, 1, 0)
+obs.mango.fl <- unlist(mapply(function(x) mango$fl_binary[which(mango$year == x + 2013)], x = 1:9))
+
+fl.acc <- rep(NA, length(obs.mango.fl))
+fl.acc[which(pred.mango.fl2 == 1 & obs.mango.fl == 1)] <- "TP"
+fl.acc[which(pred.mango.fl2 == 0 & obs.mango.fl == 0)] <- "TN"
+fl.acc[which(pred.mango.fl2 == 0 & obs.mango.fl == 1)] <- "FN"
+fl.acc[which(pred.mango.fl2 == 1 & obs.mango.fl == 0)] <- "FP"
+
+# F1 score is 2*(precision*recall)/(precision+recall)
+# precision = TP/(TP+FP)
+# recall = TP/ (TP+FN)
+
+fl.precision <- table(fl.acc)[4] / (table(fl.acc)[4] + table(fl.acc)[2])
+fl.recall <- table(fl.acc)[4] / (table(fl.acc)[4] + table(fl.acc)[1])
+
+fl.mango.f1 <- 2 * (fl.precision * fl.recall) / (fl.precision + fl.recall)
+
+# mango fruiting
+fr_mango_name <- list.files("models/loocv/", "fr_inter_mango_bin_loocv_", full.names = T)
+fr_mango <- mapply(function(x) readRDS(fr_mango_name[x]), x = 1:9)
+
+pred.mango.fr <- unlist(mapply(function(x) plogis(predict(fr_mango[[x]], newdata = mango[which(mango$year == (x + 2013)), ], allow.new.levels = T)), x = 1:9))
+pred.mango.fr2 <- ifelse(pred.mango.fr > 0.5, 1, 0)
+obs.mango.fr <- unlist(mapply(function(x) mango$fr_binary[which(mango$year == x + 2013)], x = 1:9))
+
+fr.acc <- rep(NA, length(obs.mango.fr))
+fr.acc[which(pred.mango.fr2 == 1 & obs.mango.fr == 1)] <- "TP"
+fr.acc[which(pred.mango.fr2 == 0 & obs.mango.fr == 0)] <- "TN"
+fr.acc[which(pred.mango.fr2 == 0 & obs.mango.fr == 1)] <- "FN"
+fr.acc[which(pred.mango.fr2 == 1 & obs.mango.fr == 0)] <- "FP"
+
+# F1 score is 2*(precision*recall)/(precision+recall)
+# precision = TP/(TP+FP)
+# recall = TP/ (TP+FN)
+
+fr.precision <- table(fr.acc)[4] / (table(fr.acc)[4] + table(fr.acc)[2])
+fr.recall <- table(fr.acc)[4] / (table(fr.acc)[4] + table(fr.acc)[1])
+
+fr.mango.f1 <- 2 * (fr.precision * fr.recall) / (fr.precision + fr.recall)
+
+# tam flowering
+
+fl_tam_name <- list.files("models/loocv/", "fl_inter_tam_bin_loocv_", full.names = T)
+fl_tam <- mapply(function(x) readRDS(fl_tam_name[x]), x = 1:9)
+
+pred.tam.fl <- unlist(mapply(function(x) plogis(predict(fl_tam[[x]], newdata = tam[which(tam$year == (x + 2013)), ], allow.new.levels = T)), x = 1:9))
+pred.tam.fl2 <- ifelse(pred.tam.fl > 0.5, 1, 0)
+obs.tam.fl <- unlist(mapply(function(x) tam$fl_binary[which(tam$year == x + 2013)], x = 1:9))
+
+fl.acc <- rep(NA, length(obs.tam.fl))
+fl.acc[which(pred.tam.fl2 == 1 & obs.tam.fl == 1)] <- "TP"
+fl.acc[which(pred.tam.fl2 == 0 & obs.tam.fl == 0)] <- "TN"
+fl.acc[which(pred.tam.fl2 == 0 & obs.tam.fl == 1)] <- "FN"
+fl.acc[which(pred.tam.fl2 == 1 & obs.tam.fl == 0)] <- "FP"
+
+# F1 score is 2*(precision*recall)/(precision+recall)
+# precision = TP/(TP+FP)
+# recall = TP/ (TP+FN)
+
+fl.precision <- table(fl.acc)[4] / (table(fl.acc)[4] + table(fl.acc)[2])
+fl.recall <- table(fl.acc)[4] / (table(fl.acc)[4] + table(fl.acc)[1])
+
+fl.tam.f1 <- 2 * (fl.precision * fl.recall) / (fl.precision + fl.recall)
+
+# tam fruiting
+fr_tam_name <- list.files("models/loocv/", "fr_inter_tam_bin_loocv_", full.names = T)
+fr_tam <- mapply(function(x) readRDS(fr_tam_name[x]), x = 1:9)
+
+pred.tam.fr <- unlist(mapply(function(x) plogis(predict(fr_tam[[x]], newdata = tam[which(tam$year == (x + 2013)), ], allow.new.levels = T)), x = 1:9))
+pred.tam.fr2 <- ifelse(pred.tam.fr > 0.5, 1, 0)
+obs.tam.fr <- unlist(mapply(function(x) tam$fr_binary[which(tam$year == x + 2013)], x = 1:9))
+
+fr.acc <- rep(NA, length(obs.tam.fr))
+fr.acc[which(pred.tam.fr2 == 1 & obs.tam.fr == 1)] <- "TP"
+fr.acc[which(pred.tam.fr2 == 0 & obs.tam.fr == 0)] <- "TN"
+fr.acc[which(pred.tam.fr2 == 0 & obs.tam.fr == 1)] <- "FN"
+fr.acc[which(pred.tam.fr2 == 1 & obs.tam.fr == 0)] <- "FP"
+
+# F1 score is 2*(precision*recall)/(precision+recall)
+# precision = TP/(TP+FP)
+# recall = TP/ (TP+FN)
+
+fr.precision <- table(fr.acc)[4] / (table(fr.acc)[4] + table(fr.acc)[2])
+fr.recall <- table(fr.acc)[4] / (table(fr.acc)[4] + table(fr.acc)[1])
+
+fr.tam.f1 <- 2 * (fr.precision * fr.recall) / (fr.precision + fr.recall)
+```
+
+
+```{r binary models fruiting}
+# jack
+fr_inter_jack_bin <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+  family = binomial, data = jacktrain
+)
+
+summary(fr_inter_jack_bin)
+fr_inter_jack_bin
+
+saveRDS(fr_inter_jack_bin, file = "models/fr_inter_jack_bin.rds")
+
+library(sjPlot)
+library(patchwork)
+
+p1 <- plot_model(fr_inter_jack_bin, type = "est", show.values = T, show.p = T)
+# plot_model(fr_inter_jack_bin, type="eff", transform, show.data = T)
+p2 <- plot_model(fr_inter_jack_bin, type = "eff", terms = c("FNSum_PCP_cs", "elev_cs"), transform, show.data = T)
+p3 <- plot_model(fr_inter_jack_bin, type = "eff", terms = c("FNMean_MeanSM_cs", "aspect_cs"), transform, show.data = T)
+p4 <- plot_model(fr_inter_jack_bin, type = "eff", terms = c("FNSum_DryDays_cs", "light_cs"), transform, show.data = T)
+
+png("plots/jack_bin_est_eff_fr.png", width = 12, height = 8, res = 300, units = "in")
+p1 + p2 + p3 + p4
+dev.off()
+
+# mango
+fr_inter_mango_bin <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+  family = binomial, data = mangotrain
+)
+
+summary(fr_inter_mango_bin)
+
+saveRDS(fr_inter_mango_bin, file = "models/fr_inter_mango_bin.rds")
+
+
+p1 <- plot_model(fr_inter_mango_bin, type = "est", show.values = T, show.p = T)
+# plot_model(fr_inter_jack_bin, type="eff", transform, show.data = T)
+p2 <- plot_model(fr_inter_mango_bin, type = "eff", terms = c("FNSum_PCP_cs", "elev_cs"), transform, show.data = T)
+p3 <- plot_model(fr_inter_mango_bin, type = "eff", terms = c("FNMean_MeanSM_cs", "aspect_cs"), transform, show.data = T)
+p4 <- plot_model(fr_inter_mango_bin, type = "eff", terms = c("FNSum_DryDays_cs", "light_cs"), transform, show.data = T)
+
+png("plots/mango_bin_est_eff_fr.png", width = 12, height = 8, res = 300, units = "in")
+p1 + p2 + p3 + p4
+dev.off()
+
+# tamarind
+fr_inter_tam_bin <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + (1 | User_Tree_id),
+  family = binomial, data = tamtrain
+)
+
+summary(fr_inter_tam_bin)
+
+saveRDS(fr_inter_tam_bin, file = "models/fr_inter_tam_bin.rds")
+
+
+p1 <- plot_model(fr_inter_tam_bin, type = "est", show.values = T, show.p = T)
+# plot_model(fr_inter_jack_bin, type="eff", transform, show.data = T)
+p2 <- plot_model(fr_inter_tam_bin, type = "eff", terms = c("FNSum_PCP_cs", "elev_cs"), transform, show.data = T)
+p3 <- plot_model(fr_inter_tam_bin, type = "eff", terms = c("FNMean_MeanSM_cs", "aspect_cs"), transform, show.data = T)
+p4 <- plot_model(fr_inter_tam_bin, type = "eff", terms = c("FNSum_DryDays_cs", "light_cs"), transform, show.data = T)
+
+png("plots/tam_bin_est_eff_fr.png", width = 12, height = 8, res = 300, units = "in")
+p1 + p2 + p3 + p4
+dev.off()
+
+tab_model(fr_inter_jack_bin, fr_inter_mango_bin, fr_inter_tam_bin, file = "plots/fr_inter_jmt_bin.html")
+```
+
+
+```{r binary model predictions - fruiting and flowering}
+library(seqinr)
+pred_jack <- plogis(predict(fl_inter_jack_bin, newdata = jacktest2, allow.new.levels = T))
+
+pred_jack2 <- predict(fl_inter_jack_bin, newdata = jacktest2, allow.new.levels = T, type = "response")
+rjack <- round(cor(jacktest2$fl_binary, pred_jack, use = "pairwise.complete.obs"), 2)
+
+pred_mango <- plogis(predict(fl_inter_mango_bin, newdata = mangotest, allow.new.levels = T))
+rmango <- round(cor(mangotest$fl_binary, pred_mango, use = "pairwise.complete.obs"), 2)
+
+pred_tam <- plogis(predict(fl_inter_tam_bin, newdata = tamtest, allow.new.levels = T))
+rtam <- round(cor(tamtest$fl_binary, pred_tam, use = "pairwise.complete.obs"), 2)
+
+png("plots/jmt_pred_fl_bin.png", width = 12, height = 4, res = 300, units = "in")
+par(mfrow = c(1, 3))
+plot(jitter(jacktest2$fl_binary), pred_jack,
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("jack\nr=", rjack, sep = ""), xlab = "test data", ylab = "predicted"
+)
+plot(jitter(mangotest$fl_binary), pred_mango,
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("mango\nr=", rmango, sep = ""), xlab = "test data", ylab = "predicted"
+)
+plot(jitter(tamtest$fl_binary), pred_tam,
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("tamarind\nr=", rtam, sep = ""), xlab = "test data", ylab = "predicted"
+)
+dev.off()
+
+# fruiting
+pred_jack <- plogis(predict(fr_inter_jack_bin, newdata = jacktest, allow.new.levels = T))
+rjack <- round(cor(jacktest$fr_binary, pred_jack, use = "pairwise.complete.obs"), 2)
+
+pred_mango <- plogis(predict(fr_inter_mango_bin, newdata = mangotest, allow.new.levels = T))
+rmango <- round(cor(mangotest$fr_binary, pred_mango, use = "pairwise.complete.obs"), 2)
+
+pred_tam <- plogis(predict(fr_inter_tam_bin, newdata = tamtest, allow.new.levels = T))
+rtam <- round(cor(tamtest$fr_binary, pred_tam, use = "pairwise.complete.obs"), 2)
+
+png("plots/jmt_pred_fr_bin.png", width = 12, height = 4, res = 300, units = "in")
+par(mfrow = c(1, 3))
+plot(jitter(jacktest$fr_binary), pred_jack,
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("jack\nr=", rjack, sep = ""), xlab = "test data", ylab = "predicted"
+)
+plot(jitter(mangotest$fr_binary), pred_mango,
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("mango\nr=", rmango, sep = ""), xlab = "test data", ylab = "predicted"
+)
+plot(jitter(tamtest$fr_binary), pred_tam,
+  col = col2alpha(rgb(0, 0, 0), alpha = 0.1), pch = 16,
+  main = paste("tamarind\nr=", rtam, sep = ""), xlab = "test data", ylab = "predicted"
+)
+dev.off()
+```
+
+```{r models using user id as a random effect}
+library(lme4)
+
+# jack
+fl_jack_bin_usr2 <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs +
+    (1 | User_id / User_Tree_id),
+  family = binomial, data = jacktrain
+)
+
+saveRDS(fl_jack_bin_usr2, file = "models/fl_jack_bin_usr.rds")
+
+# mango
+fl_mango_bin_usr2 <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs +
+    (1 | User_id / User_Tree_id),
+  family = binomial, data = mangotrain
+)
+
+
+saveRDS(fl_mango_bin_usr2, file = "models/fl_mango_bin_usr.rds")
+
+# tam
+fl_tam_bin_usr2 <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs +
+    (1 | User_id / User_Tree_id),
+  family = binomial, data = tamtrain
+)
+
+saveRDS(fl_tam_bin_usr2, file = "models/fl_tam_bin_usr.rds")
+
+library(sjPlot)
+
+tab_model(fl_jack_bin_usr2, fl_mango_bin_usr2, fl_tam_bin_usr2, file = "plots/fl_jmt_bin_usr.html")
+
+summary(fl_jack_bin_usr2)
+summary(fl_mango_bin_usr2)
+summary(fl_tam_bin_usr2)
+
+# fruiting
+
+# jack
+fr_jack_bin_usr <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs +
+    (1 | User_id / User_Tree_id),
+  family = binomial, data = jacktrain
+)
+
+saveRDS(fr_jack_bin_usr, file = "models/fr_jack_bin_usr.rds")
+
+# mango
+fr_mango_bin_usr <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs +
+    (1 | User_id / User_Tree_id),
+  family = binomial, data = mangotrain
+)
+
+
+saveRDS(fr_mango_bin_usr, file = "models/fr_mango_bin_usr.rds")
+
+# tam
+fr_tam_bin_usr <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs +
+    (1 | User_id / User_Tree_id),
+  family = binomial, data = tamtrain
+)
+
+saveRDS(fr_tam_bin_usr, file = "models/fr_tam_bin_usr.rds")
+
+library(sjPlot)
+
+tab_model(fr_jack_bin_usr, fr_mango_bin_usr, fr_tam_bin_usr, file = "models/fr_jmt_bin_usr.html")
+
+summary(fr_jack_bin_usr)
+summary(fr_mango_bin_usr)
+summary(fr_tam_bin_usr)
+```
+```{r models using monthly env variables}
+library(lme4)
+
+# using the full data for this
+
+# jack
+fl_jack_bin_mn <- glmer(
+  fl_binary ~ MNSum_PCP_cs + MNMean_MaxTemp_cs +
+    MNMean_MeanSM_cs + MNSum_DryDays_cs +
+    elev_cs * MNSum_PCP_cs + aspect_cs * MNMean_MeanSM_cs +
+    light_cs * MNSum_DryDays_cs +
+    (1 | User_Tree_id),
+  family = binomial, data = sw_spat_rescale[sw_spat_rescale$Species_name == "Artocarpus heterophyllus", ]
+)
+
+saveRDS(fl_jack_bin_mn, file = "models/fl_jack_bin_mn.rds")
+
+# mango
+fl_mango_bin_mn <- glmer(
+  fl_binary ~ MNSum_PCP_cs + MNMean_MaxTemp_cs +
+    MNMean_MeanSM_cs + MNSum_DryDays_cs +
+    elev_cs * MNSum_PCP_cs + aspect_cs * MNMean_MeanSM_cs +
+    light_cs * MNSum_DryDays_cs +
+    (1 | User_Tree_id),
+  family = binomial, data = sw_spat_rescale[sw_spat_rescale$Species_name == "Mangifera indica", ]
+)
+
+saveRDS(fl_mango_bin_mn, file = "models/fl_mango_bin_mn.rds")
+
+# tam
+fl_tam_bin_mn <- glmer(
+  fl_binary ~ MNSum_PCP_cs + MNMean_MaxTemp_cs +
+    MNMean_MeanSM_cs + MNSum_DryDays_cs +
+    elev_cs * MNSum_PCP_cs + aspect_cs * MNMean_MeanSM_cs +
+    light_cs * MNSum_DryDays_cs +
+    (1 | User_Tree_id),
+  family = binomial, data = sw_spat_rescale[sw_spat_rescale$Species_name == "Tamarindus indica", ]
+)
+
+saveRDS(fl_tam_bin_mn, file = "models/fl_tam_bin_mn.rds")
+
+library(sjPlot)
+
+tab_model(fl_jack_bin_mn, fl_mango_bin_mn, fl_tam_bin_mn, file = "plots/fl_jmt_bin_mn.html")
+
+summary(fl_jack_bin_mn)
+summary(fl_mango_bin_mn)
+summary(fl_tam_bin_mn)
+
+
+# fruiting
+
+
+# jack
+fr_jack_bin_mn <- glmer(
+  fr_binary ~ MNSum_PCP_cs + MNMean_MaxTemp_cs +
+    MNMean_MeanSM_cs + MNSum_DryDays_cs +
+    elev_cs * MNSum_PCP_cs + aspect_cs * MNMean_MeanSM_cs +
+    light_cs * MNSum_DryDays_cs +
+    (1 | User_Tree_id),
+  family = binomial, data = sw_spat_rescale[sw_spat_rescale$Species_name == "Artocarpus heterophyllus", ]
+)
+
+saveRDS(fr_jack_bin_mn, file = "models/fr_jack_bin_mn.rds")
+
+# mango
+fr_mango_bin_mn <- glmer(
+  fr_binary ~ MNSum_PCP_cs + MNMean_MaxTemp_cs +
+    MNMean_MeanSM_cs + MNSum_DryDays_cs +
+    elev_cs * MNSum_PCP_cs + aspect_cs * MNMean_MeanSM_cs +
+    light_cs * MNSum_DryDays_cs +
+    (1 | User_Tree_id),
+  family = binomial, data = sw_spat_rescale[sw_spat_rescale$Species_name == "Mangifera indica", ]
+)
+
+saveRDS(fr_mango_bin_mn, file = "models/fr_mango_bin_mn.rds")
+
+# tam
+fr_tam_bin_mn <- glmer(
+  fr_binary ~ MNSum_PCP_cs + MNMean_MaxTemp_cs +
+    MNMean_MeanSM_cs + MNSum_DryDays_cs +
+    elev_cs * MNSum_PCP_cs + aspect_cs * MNMean_MeanSM_cs +
+    light_cs * MNSum_DryDays_cs +
+    (1 | User_Tree_id),
+  family = binomial, data = sw_spat_rescale[sw_spat_rescale$Species_name == "Tamarindus indica", ]
+)
+
+saveRDS(fr_tam_bin_mn, file = "models/fr_tam_bin_mn.rds")
+
+library(sjPlot)
+
+tab_model(fr_jack_bin_mn, fr_mango_bin_mn, fr_tam_bin_mn, file = "plots/fr_jmt_bin_mn.html")
+
+summary(fr_jack_bin_mn)
+summary(fr_mango_bin_mn)
+summary(fr_tam_bin_mn)
+```
+
+```{r location and week as weights}
+library(lme4)
+
+# jack
+fl_inter_jack_bin_loc_time <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + lat_sc + long_sc + month + (1 | User_Tree_id),
+  family = binomial, data = jack,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(fl_inter_jack_bin_loc_time, file = "models/fl_inter_jack_bin_loc_time.rds")
+
+fr_inter_jack_bin_loc_time <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + lat_sc + long_sc + month + (1 | User_Tree_id),
+  family = binomial, data = jack,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(fr_inter_jack_bin_loc_time, file = "models/fr_inter_jack_bin_loc_time.rds")
+
+# mango
+fl_inter_mango_bin_loc_time <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + lat_sc + long_sc + month + (1 | User_Tree_id),
+  family = binomial, data = mango,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(fl_inter_mango_bin_loc_time, file = "models/fl_inter_mango_bin_loc_time.rds")
+
+fr_inter_mango_bin_loc_time <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + lat_sc + long_sc + month + (1 | User_Tree_id),
+  family = binomial, data = mango,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 1000000))
+)
+
+saveRDS(fr_inter_mango_bin_loc_time, file = "models/fr_inter_mango_bin_loc_time.rds")
+
+# tam
+fl_inter_tam_bin_loc_time <- glmer(
+  fl_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + lat_sc + long_sc + month + (1 | User_Tree_id),
+  family = binomial, data = tam,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(fl_inter_tam_bin_loc_time, file = "models/fl_inter_tam_bin_loc_time.rds")
+
+fr_inter_tam_bin_loc_time <- glmer(
+  fr_binary ~ FNSum_PCP_cs + FNMean_MaxTemp_cs +
+    FNMean_MeanSM_cs + FNSum_DryDays_cs +
+    elev_cs * FNSum_PCP_cs + aspect_cs * FNMean_MeanSM_cs +
+    light_cs * FNSum_DryDays_cs + lat_sc + long_sc + month + (1 | User_Tree_id),
+  family = binomial, data = tam,
+  glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000))
+)
+
+saveRDS(fr_inter_tam_bin_loc_time, file = "models/fr_inter_tam_bin_loc_time.rds")
+```

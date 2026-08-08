@@ -1,0 +1,175 @@
+---
+title: "making response variables"
+author: "Krishna Anujan"
+date: "07/09/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r read the files}
+library(lubridate)
+library(plyr)
+library(dplyr)
+
+sw_msg<-read.csv("data/raw_data/sw_top3_nopid_16Sep.csv")
+recode<-read.csv("SW_recoding.csv")
+```
+
+```{r dates and removing pre-2014}
+
+#maybe need to use parse_date_time
+sw_msg$Date2<-parse_date_time(sw_msg$Date_of_observation, 
+                              orders=c('%d/%m/%Y', '%Y/%m/%d'))
+
+
+sw_msg$date<-day(sw_msg$Date2)
+sw_msg$week<-week(sw_msg$Date2)
+sw_msg$month<-month(sw_msg$Date2)
+sw_msg$year<-year(sw_msg$Date2)
+
+#remove data before 2014
+sw_msg_from2014<-sw_msg[which(sw_msg$year>=2014),]
+
+```
+
+
+```{r making the response variables}
+
+#recoding using table in the file
+
+#Vectors of all phenophases
+bud<-sw_msg_from2014$Flowers_bud
+fl<-sw_msg_from2014$Flowers_open
+unripe<-sw_msg_from2014$Fruits_unripe
+ripe<-sw_msg_from2014$Fruits_ripe
+
+#binding and recoding all into 0, 1, 2 and converting to numeric
+all_pheno<-as.matrix(cbind(bud, fl, unripe, ripe))
+all_pheno[which(all_pheno%in%c("Few", "1"))]<-"1"
+all_pheno[which(all_pheno%in%c("Many", "2"))]<-"2"
+all_pheno[which(all_pheno=="0")]<-"0"
+all_pheno[which(all_pheno%in%c("-1", "-2", ""))]<-NA
+all_pheno<-matrix(as.numeric(all_pheno), ncol=ncol(all_pheno))
+
+str(all_pheno)
+all_pheno<-as.data.frame(all_pheno)
+
+#creating a combined column for flowering and fruiting
+all_pheno$fl<-paste(all_pheno$V1,all_pheno$V2)
+all_pheno$fr<-paste(all_pheno$V3,all_pheno$V4)
+recode$both<-paste(recode$bud.unripe.fruit, recode$open.flower.ripe.fruit)
+
+#recoding by matching from the recode file
+all_pheno$fl_binary<-recode$binary[match(all_pheno$fl, recode$both)]
+all_pheno$fl_intensity<-recode$intensity[match(all_pheno$fl, recode$both)]
+all_pheno$fr_binary<-recode$binary[match(all_pheno$fr, recode$both)]
+all_pheno$fr_intensity<-recode$intensity[match(all_pheno$fr, recode$both)]
+
+#adding columns to main dataframe
+sw_msg_from2014$fl_binary<-all_pheno$fl_binary
+sw_msg_from2014$fl_intensity<-all_pheno$fl_intensity
+sw_msg_from2014$fr_binary<-all_pheno$fr_binary
+sw_msg_from2014$fr_intensity<-all_pheno$fr_intensity
+
+write.csv(sw_msg_from2014, "sw_msg_from2014.csv", row.names = F)
+
+```
+
+```{r Kerala only dataset}
+
+#clip to data that has is.Kl1==1
+sw_msg_KL1<-sw_msg_from2014[sw_msg_from2014$is.KL1==1,]
+sw_msg_KL2<-sw_msg_from2014[sw_msg_from2014$is.KL2==1,]
+
+#KL1 is the conservative estimate
+
+
+```
+
+```{r data summaries}
+
+library(plyr)
+library(ggplot2)
+library(patchwork)
+
+sp_fl<-ggplot(sw_msg_KL1, aes(y=fl_binary, color=Species_name, fill=Species_name))+
+  geom_histogram()
+sp_fl_in<-ggplot(sw_msg_KL1, aes(y=fl_intensity, color=Species_name, fill=Species_name))+
+  geom_histogram()
+sp_fr<-ggplot(sw_msg_KL1, aes(y=fr_binary, color=Species_name, fill=Species_name))+
+  geom_histogram()
+sp_fr_in<-ggplot(sw_msg_KL1, aes(y=fr_intensity, color=Species_name, fill=Species_name))+
+  geom_histogram()
+
+png("plots/summary_bars.png", width=12, height=12, units="in", res=300)
+sp_fl+sp_fl_in+sp_fr+sp_fr_in
+dev.off()
+
+library(gridExtra)
+
+sp_fl_yr<-ggplot(sw_msg_KL1, aes(y=fl_binary, color=Species_name, fill=Species_name))+
+  geom_histogram()+facet_grid(year~.)
+
+sp_fr_yr<-ggplot(sw_msg_KL1, aes(y=fr_binary, color=Species_name, fill=Species_name))+
+  geom_histogram()+facet_grid(year~.)
+
+png("plots/summary_sp_yr_bin.png", width=12, height=12, units="in", res=300)
+sp_fl_yr+sp_fr_yr
+dev.off()
+
+```
+```{r summary tables}
+#basic
+table(sw_msg_KL1$fl_binary)
+
+resp_sum_sp<-ddply(sw_msg_KL1, .(Species_name), summarise,
+                n=length(fl_binary),
+                fl_nas=sum(is.na(fl_binary)==T),
+                fr_nas=sum(is.na(fr_binary)==T),
+                fl_no=sum(fl_binary==0, na.rm=T),
+                fl_yes=sum(fl_binary==1, na.rm=T),
+                fl_int0=sum(fl_intensity==0, na.rm=T),
+                fl_int1=sum(fl_intensity==1, na.rm=T),
+                fl_int2=sum(fl_intensity==2, na.rm=T),
+                fr_no=sum(fr_binary==0, na.rm=T),
+                fr_yes=sum(fr_binary==1, na.rm=T),
+                fr_int0=sum(fr_intensity==0, na.rm=T),
+                fr_int1=sum(fr_intensity==1, na.rm=T),
+                fr_int2=sum(fr_intensity==2, na.rm=T))
+
+resp_sum_yr<-ddply(sw_msg_KL1, .(year), summarise,
+                n=length(fl_binary),
+                fl_nas=sum(is.na(fl_binary)==T),
+                fr_nas=sum(is.na(fr_binary)==T),
+                fl_no=sum(fl_binary==0, na.rm=T),
+                fl_yes=sum(fl_binary==1, na.rm=T),
+                fl_int0=sum(fl_intensity==0, na.rm=T),
+                fl_int1=sum(fl_intensity==1, na.rm=T),
+                fl_int2=sum(fl_intensity==2, na.rm=T),
+                fr_no=sum(fr_binary==0, na.rm=T),
+                fr_yes=sum(fr_binary==1, na.rm=T),
+                fr_int0=sum(fr_intensity==0, na.rm=T),
+                fr_int1=sum(fr_intensity==1, na.rm=T),
+                fr_int2=sum(fr_intensity==2, na.rm=T))
+
+
+resp_sum_sp_yr<-ddply(sw_msg_KL1, .(Species_name, year), summarise,
+                n=length(fl_binary),
+                fl_nas=sum(is.na(fl_binary)==T),
+                fr_nas=sum(is.na(fr_binary)==T),
+                fl_no=sum(fl_binary==0, na.rm=T),
+                fl_yes=sum(fl_binary==1, na.rm=T),
+                fl_int0=sum(fl_intensity==0, na.rm=T),
+                fl_int1=sum(fl_intensity==1, na.rm=T),
+                fl_int2=sum(fl_intensity==2, na.rm=T),
+                fr_no=sum(fr_binary==0, na.rm=T),
+                fr_yes=sum(fr_binary==1, na.rm=T),
+                fr_int0=sum(fr_intensity==0, na.rm=T),
+                fr_int1=sum(fr_intensity==1, na.rm=T),
+                fr_int2=sum(fr_intensity==2, na.rm=T))
+
+```

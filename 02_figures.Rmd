@@ -1,0 +1,1498 @@
+---
+title: "SW phenology figures"
+author: "Krishna Anujan"
+date: "17/11/2022"
+output: html_document
+---
+
+```{r Figure 1}
+# Figure 1: Maps - 3 species where are they? Hotspot analysis for observations from Carina (over time most places have added observations)
+
+# jack - #1e824c
+# mango - #f7ca18
+# tam - #a6915c
+
+# map of Kerala
+# library(rgdal)
+library(sf)
+library(ggplot2)
+
+# KL<-readOGR("C://Users/krish/Documents/SeasonWatch/data/kerala_shapefiles/kerala-master/shapefiles", "state")
+KL <- st_read("C://Users/krish/Documents/SeasonWatch/data/kerala_shapefiles/kerala-master/shapefiles/state.shp")
+
+# world_shp<-readOGR("C://Users/krish/Documents/Columbia/Naeem_Lab/Phd_thesis/Chap3/maps/world_borders", "TM_WORLD_BORDERS_SIMPL-0.3")
+world_shp <- st_read("C://Users/krish/Documents/Columbia/Naeem_Lab/Phd_thesis/Chap3/maps/world_borders/TM_WORLD_BORDERS_SIMPL-0.3.shp")
+
+# world_shp2<-unionSpatialPolygons(world_shp, IDs=world_shp@data$NAME)
+
+
+
+plot(world_shp[world_shp$NAME == "India", ])
+
+# ind2<-readOGR("C://Users/krish/Documents/Andamans/Fejervarya/India-shape/india_shape2", "India_Country_Boundary")
+ind2 <- st_read("C://Users/krish/Documents/Andamans/Fejervarya/India-shape/india_shape2/India_Country_Boundary.shp")
+
+
+# ind<-spTransform(ind2, crs(KL))
+ind <- st_transform(ind2, st_crs(KL))
+# mybb <- SpatialPolygons(list(Polygons(list(Polygon(extent(and_shp))),"1")), proj4string=crs(and_shp))
+# ind<-project(ind2,)
+
+
+# other images
+library(png)
+SW_diag <- readPNG("C://Users/krish/Documents/SeasonWatch/MSG/images/1.png")
+jack_illus <- readPNG("C://Users/krish/Documents/SeasonWatch/MSG/images/jackfruit_illus.png")
+mango_illus <- readPNG("C://Users/krish/Documents/SeasonWatch/MSG/images/mango_illus.png")
+tam_illus <- readPNG("C://Users/krish/Documents/SeasonWatch/MSG/images/tamarind_illus.png")
+
+
+# png("plots/figs/Fig1.png", width=8, height =4, units="in", res=300)
+png("plots/figs/Fig1_greyfill.png", width = 8, height = 4, units = "in", res = 300)
+
+par(mfrow = c(1, 3))
+
+# jack
+plot(KL)
+plot(ind, add = T, border = "grey", col = "grey80")
+plot(KL, add = T, col = "white")
+points(lat ~ long, sw_spat_forcor[sw_spat_forcor$Species_name == "Artocarpus heterophyllus", ], pch = 16, col = "#1e824c", cex = 0.5)
+text(77, 12.5, "jackfruit\nn.tree = 7930\nn.obs=72100", cex = 0.7)
+axis(2)
+grid()
+# points(lat~long, #sw_spat_forcor[sw_spat_forcor$Species_name=="Artocarpus heterophyllus",], cex=0.5)
+
+# mango
+plot(KL)
+plot(ind, add = T, border = "grey", col = "grey80")
+plot(KL, add = T, col = "white")
+points(lat ~ long, sw_spat_forcor[sw_spat_forcor$Species_name == "Mangifera indica", ], pch = 16, col = "#f7ca18", cex = 0.5)
+text(77, 12.5, "mango\nn.tree = 9924\nn.obs=68701", cex = 0.7)
+axis(1)
+grid()
+# points(lat~long, #sw_spat_forcor[sw_spat_forcor$Species_name=="Mangifera indica",], cex=0.5)
+
+# tamarind
+plot(KL)
+plot(ind, add = T, border = "grey", col = "grey80")
+plot(KL, add = T, col = "white")
+points(lat ~ long, sw_spat_forcor[sw_spat_forcor$Species_name == "Tamarindus indica", ], pch = 16, col = "#a6915c", cex = 0.5)
+text(77, 12.5, "tamarind\nn.tree = 1751\nn.obs=24214", cex = 0.7)
+# points(lat~long, #sw_spat_forcor[sw_spat_forcor$Species_name=="Tamarindus indica",], cex=0.5)
+grid()
+dev.off()
+
+# images and maps-------------------
+
+png("plots/figs/indmap2.png", width = 4, height = 4, units = "in", res = 300)
+
+# plot(ind, col="white", border="grey40")
+# plot(KL, add=T, col="grey")
+# axis(1)
+# axis(2)
+# grid()
+
+# grid()
+
+# plot world, then India, then Kerala using ggplot and sf
+ggplot() +
+  geom_sf(data = st_as_sf(world_shp), fill = "white", colour = "grey40") +
+  geom_sf(data = st_as_sf(ind), fill = "white", colour = "grey40", size = 2, linewidth = 0.4) +
+  geom_sf(data = st_as_sf(KL), fill = "grey80", colour = "grey20", size = 2, linewidth = 0.4) +
+  # bound to india's borders
+  coord_sf(xlim = c(68, 98), ylim = c(6, 38)) +
+  theme_bw() +
+  xlab("") +
+  ylab("") +
+  theme(
+    axis.line.y = element_line(colour = "black"),
+    axis.line.x = element_line(colour = "black"),
+    # panel.border = element_blank(),
+    # axis.text.x = element_text(colour="white"),
+    # axis.ticks.x = element_blank(),
+    panel.background = element_rect(fill = "aliceblue", colour = "aliceblue"),
+  )
+
+dev.off()
+```
+
+```{r maps in ggplot, echo=F}
+library(sf)
+lat <- as.numeric(sw_spat_forcor$lat)
+long <- as.numeric(sw_spat_forcor$long)
+
+sw_coords <- as.data.frame(cbind(long, lat))
+sw_points <- SpatialPointsDataFrame(coords = sw_coords, data = sw_spat_forcor, proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+
+jack_pts <- ggplot() +
+  geom_sf(data = st_as_sf(ind), fill = "grey80", colour = "grey40") +
+  geom_sf(data = st_as_sf(KL), fill = "white", colour = "grey20", size = 0.4) +
+  geom_sf(data = st_as_sf(sw_points[sw_points$Species_name == "Artocarpus heterophyllus", ]), col = "#1e824c", size = 0.5) +
+  coord_sf(xlim = c(75, 77.5), ylim = c(8, 13)) +
+  annotate(geom = "text", x = 77, y = 12.5, label = "jackfruit\nn.tree = 7930\nn.obs=72100", size = 3) +
+  theme_bw() +
+  xlab("") +
+  ylab("") +
+  theme(
+    axis.line.y = element_line(colour = "black"),
+    panel.border = element_blank(),
+    axis.text.x = element_text(colour = "white"),
+    axis.ticks.x = element_blank(),
+    # panel.background= element_rect(fill = "aliceblue", colour = "aliceblue"),
+  )
+jack_pts
+
+mango_pts <- ggplot() +
+  geom_sf(data = st_as_sf(ind), fill = "grey80", colour = "grey40") +
+  geom_sf(data = st_as_sf(KL), fill = "white", colour = "grey20", size = 0.4) +
+  geom_sf(data = st_as_sf(sw_points[sw_points$Species_name == "Mangifera indica", ]), col = "#f7ca18", size = 0.5) +
+  coord_sf(xlim = c(75, 77.5), ylim = c(8, 13)) +
+  annotate(geom = "text", x = 77, y = 12.5, label = "mango\nn.tree = 9924\nn.obs=68701", size = 3) +
+  scale_x_continuous(breaks = seq(75, 78)) +
+  theme_bw() +
+  xlab("") +
+  ylab("") +
+  theme(
+    axis.line.x = element_line(colour = "black"),
+    panel.border = element_blank(),
+    axis.text.y = element_text(colour = "white"),
+    axis.ticks.y = element_blank(),
+    # panel.background= element_rect(fill = "aliceblue", colour = "aliceblue"),
+  )
+mango_pts
+
+tam_pts <- ggplot() +
+  geom_sf(data = st_as_sf(ind), fill = "grey80", colour = "grey40") +
+  geom_sf(data = st_as_sf(KL), fill = "white", colour = "grey20", size = 0.4) +
+  geom_sf(data = st_as_sf(sw_points[sw_points$Species_name == "Tamarindus indica", ]), col = "#a6915c", size = 0.5) +
+  coord_sf(xlim = c(75, 77.5), ylim = c(8, 13)) +
+  annotate(geom = "text", x = 77, y = 12.5, label = "tamarind\nn.tree = 1751\nn.obs=24214", size = 3) +
+  theme_bw() +
+  xlab("") +
+  ylab("") +
+  theme( # axis.line =  element_line(colour = "black"),
+    panel.border = element_blank(),
+    axis.text = element_text(colour = "white"),
+    axis.ticks = element_blank(),
+    # panel.background= element_rect(fill = "aliceblue", colour = "aliceblue"),
+  )
+tam_pts
+
+library(gridExtra)
+png("plots/figs/all_pts2.png", width = 8, height = 4, units = "in", res = 300)
+grid.arrange(jack_pts, mango_pts, tam_pts, nrow = 1)
+dev.off()
+```
+
+```{r read all GLMMs}
+# ordinal flowering
+fl_inter_jack_po <- readRDS("models/fl_inter_jack_po.rds")
+fl_inter_mango_po <- readRDS("models/fl_inter_mango_po.rds")
+fl_inter_tam_po <- readRDS("models/fl_inter_tam_po.rds")
+
+# ordinal fruiting
+fr_inter_jack_po <- readRDS("models/fr_inter_jack_po.rds")
+fr_inter_mango_po <- readRDS("models/fr_inter_mango_po.rds")
+fr_inter_tam_po <- readRDS("models/fr_inter_tam_po.rds")
+
+# binary flowering
+fl_inter_jack_bin <- readRDS("models/fl_inter_jack_bin.rds")
+fl_inter_mango_bin <- readRDS("models/fl_inter_mango_bin.rds")
+fl_inter_tam_bin <- readRDS("models/fl_inter_tam_bin.rds")
+
+# binary fruiting
+fr_inter_jack_bin <- readRDS("models/fr_inter_jack_bin.rds")
+fr_inter_mango_bin <- readRDS("models/fr_inter_mango_bin.rds")
+fr_inter_tam_bin <- readRDS("models/fr_inter_tam_bin.rds")
+```
+
+```{r Figure 2}
+# Figure 2: estimates for all ordinal and binary models - 6 panels (one panel each for one species, each panel has estimates for both fruiting and flowering models - stacked. Grey out the non-significant predictors) (see if ML also fits here)
+
+# read all the binary and ordinal fruiting and flowering models first
+
+
+library(ordinal)
+
+# estimates calculated from here - https://github.com/runehaubo/ordinal/issues/25
+
+mod <- fl_inter_jack_bin
+
+clmm.est <- function(mod) {
+  est <- coef(mod)
+  sdhat <- sqrt(diag(vcov(mod)))
+  CI <- est + tcrossprod(1.96 * sdhat, c(-1, 1))
+  rownames(CI) <- names(est)
+  CI <- CI[seq_len(length(est) - 1), ]
+  ests <- as.data.frame(cbind(CI, est[seq_len(length(est) - 1)]))
+  ests <- cbind(ests, rownames(CI))
+  colnames(ests) <- c("lower", "upper", "est", "vars")
+  ests$vars <- factor(ests$vars, levels = rownames(CI))
+  return(ests)
+}
+
+bin.est <- function(mod) {
+  est <- coef(summary(mod))[, 1]
+  sdhat <- sqrt(diag(vcov(mod)))
+  CI <- est + tcrossprod(1.96 * sdhat, c(-1, 1))
+  rownames(CI) <- names(est)
+  CI <- CI[seq_len(length(est)), ]
+  ests <- as.data.frame(cbind(CI, est[seq_len(length(est))]))
+  ests <- cbind(ests, rownames(CI))
+  colnames(ests) <- c("lower", "upper", "est", "vars")
+  ests$vars <- factor(ests$vars, levels = rownames(CI))
+  return(ests)
+}
+
+# CHECK WHETHER THIS IS ODDS RATIO OR TRANSFORMED
+# ANS: It is transformed and not odds ratio
+
+# jack panel
+jack_fl_po_est <- clmm.est(fl_inter_jack_po)
+jack_fl_po_est$phenophase <- rep("flowering", nrow(jack_fl_po_est))
+jack_fr_po_est <- clmm.est(fr_inter_jack_po)
+jack_fr_po_est$phenophase <- rep("fruiting", nrow(jack_fr_po_est))
+jack_ord_est <- rbind(jack_fl_po_est, jack_fr_po_est)
+jack_ord_est$phenophase <- factor(jack_ord_est$phenophase)
+jack_ord_est$sig <- mapply(function(p) ifelse(jack_ord_est$upper[p] >= 0 & jack_ord_est$lower[p] <= 0, "no", "yes"), p = seq(1:nrow(jack_ord_est)))
+ymin <- min(jack_ord_est$lower)
+ymax <- max(jack_ord_est$upper)
+
+# mango panel
+mango_fl_po_est <- clmm.est(fl_inter_mango_po)
+mango_fl_po_est$phenophase <- rep("flowering", nrow(mango_fl_po_est))
+mango_fr_po_est <- clmm.est(fr_inter_mango_po)
+mango_fr_po_est$phenophase <- rep("fruiting", nrow(mango_fr_po_est))
+mango_ord_est <- rbind(mango_fl_po_est, mango_fr_po_est)
+mango_ord_est$phenophase <- factor(mango_ord_est$phenophase)
+mango_ord_est$sig <- mapply(function(p) ifelse(mango_ord_est$upper[p] >= 0 & mango_ord_est$lower[p] <= 0, "no", "yes"), p = seq(1:nrow(mango_ord_est)))
+
+# tam panel
+tam_fl_po_est <- clmm.est(fl_inter_tam_po)
+tam_fl_po_est$phenophase <- rep("flowering", nrow(tam_fl_po_est))
+tam_fr_po_est <- clmm.est(fr_inter_tam_po)
+tam_fr_po_est$phenophase <- rep("fruiting", nrow(tam_fr_po_est))
+tam_ord_est <- rbind(tam_fl_po_est, tam_fr_po_est)
+tam_ord_est$phenophase <- factor(tam_ord_est$phenophase)
+tam_ord_est$sig <- mapply(function(p) ifelse(tam_ord_est$upper[p] >= 0 & tam_ord_est$lower[p] <= 0, "no", "yes"), p = seq(1:nrow(tam_ord_est)))
+
+
+library(ggplot2)
+
+# jack - #1e824c
+# mango - #f7ca18
+# tam - #a6915c
+
+jack_ord_est2 <- jack_ord_est[c(1:9, 13:21), ]
+mango_ord_est2 <- mango_ord_est[c(1:9, 13:21), ]
+tam_ord_est2 <- tam_ord_est[c(1:9, 13:21), ]
+
+jack_ord <- ggplot(jack_ord_est, aes(y = est, x = vars, group = pheno, shape = pheno, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.5)) +
+  scale_color_manual(values = c("grey", "#1e824c")) +
+  geom_errorbar(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.9)) +
+  ggtitle("jackfruit") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal()
+
+jack_ord2 <- ggplot(jack_ord_est2, aes(y = est, x = vars, group = phenophase, shape = phenophase, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.5)) +
+  scale_color_manual(values = c("grey", "#1e824c")) +
+  geom_linerange(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.5)) +
+  ggtitle("jackfruit") +
+  xlab("ordinal model predictors") +
+  ylab("model coefficient") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal() +
+  guides(shape = FALSE, color = FALSE)
+jack_ord2
+
+mango_ord <- ggplot(mango_ord_est, aes(y = est, x = vars, group = pheno, shape = pheno, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.9)) +
+  geom_errorbar(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.9)) +
+  scale_color_manual(values = c("grey", "#f7ca18")) +
+  ggtitle("mango") +
+  ylab("model coefficient") +
+  scale_x_discrete(labels = NULL, name = NULL) +
+  # ylim(NA, NA)+
+  coord_flip() +
+  theme_minimal()
+
+mango_ord2 <- ggplot(mango_ord_est2, aes(y = est, x = vars, group = phenophase, shape = phenophase, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.5)) +
+  geom_linerange(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.5)) +
+  scale_color_manual(values = c("grey", "#f7ca18")) +
+  ggtitle("mango") +
+  ylab("model coefficient") +
+  scale_x_discrete(labels = NULL, name = NULL) +
+  xlab("") +
+  guides(shape = FALSE, color = FALSE) +
+  # ylim(NA, NA)+
+  coord_flip() +
+  theme_minimal()
+mango_ord2
+
+tam_ord <- ggplot(tam_ord_est, aes(y = est, x = vars, group = pheno, shape = pheno, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.9)) +
+  scale_color_manual(values = c("grey", "#a6915c")) +
+  ggtitle("tamarind") +
+  ylab("model coefficient") +
+  scale_x_discrete(labels = NULL, name = NULL) +
+  # ylim(NA, NA)+
+  coord_flip() +
+  theme_minimal()
+
+tam_ord2 <- ggplot(tam_ord_est2, aes(y = est, x = vars, group = phenophase, shape = phenophase, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.5)) +
+  geom_linerange(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.5)) +
+  scale_color_manual(values = c("grey", "#a6915c")) +
+  ggtitle("tamarind") +
+  xlab("") +
+  ylab("model coefficient") +
+  scale_x_discrete(labels = NULL, name = NULL) +
+  guides(color = FALSE) +
+  # ylim(NA, NA)+
+  coord_flip() +
+  theme_minimal()
+tam_ord2
+
+library(gridExtra)
+
+library(patchwork)
+
+# binomial models
+library(lme4)
+jack_fl_bin_est <- bin.est(fl_inter_jack_bin)
+jack_fl_bin_est$phenophase <- rep("flowering", nrow(jack_fl_bin_est))
+jack_fr_bin_est <- bin.est(summary(fr_inter_jack_bin))
+jack_fr_bin_est$phenophase <- rep("fruiting", nrow(jack_fr_bin_est))
+jack_bin_est <- rbind(jack_fl_bin_est, jack_fr_bin_est)
+jack_bin_est$phenophase <- factor(jack_bin_est$phenophase)
+jack_bin_est$sig <- mapply(function(p) ifelse(jack_bin_est$upper[p] >= 0 & jack_bin_est$lower[p] <= 0, "no", "yes"), p = seq(1:nrow(jack_bin_est)))
+
+# mango panel
+mango_fl_bin_est <- bin.est(fl_inter_mango_bin)
+mango_fl_bin_est$phenophase <- rep("flowering", nrow(mango_fl_bin_est))
+mango_fr_bin_est <- bin.est(fr_inter_mango_bin)
+mango_fr_bin_est$phenophase <- rep("fruiting", nrow(mango_fr_bin_est))
+mango_bin_est <- rbind(mango_fl_bin_est, mango_fr_bin_est)
+mango_bin_est$phenophase <- factor(mango_bin_est$phenophase)
+mango_bin_est$sig <- mapply(function(p) ifelse(mango_bin_est$upper[p] >= 0 & mango_bin_est$lower[p] <= 0, "no", "yes"), p = seq(1:nrow(mango_bin_est)))
+
+# tam panel
+tam_fl_bin_est <- bin.est(fl_inter_tam_bin)
+tam_fl_bin_est$phenophase <- rep("flowering", nrow(tam_fl_bin_est))
+tam_fr_bin_est <- bin.est(fr_inter_tam_bin)
+tam_fr_bin_est$phenophase <- rep("fruiting", nrow(tam_fr_bin_est))
+tam_bin_est <- rbind(tam_fl_bin_est, tam_fr_bin_est)
+tam_bin_est$phenophase <- factor(tam_bin_est$phenophase)
+tam_bin_est$sig <- mapply(function(p) ifelse(tam_bin_est$upper[p] >= 0 & tam_bin_est$lower[p] <= 0, "no", "yes"), p = seq(1:nrow(tam_bin_est)))
+
+jack_bin_est2 <- jack_bin_est[c(1:8, 12:19), ]
+mango_bin_est2 <- mango_bin_est[c(1:8, 12:19), ]
+tam_bin_est2 <- tam_bin_est[c(1:8, 12:19), ]
+
+jack_bin <- ggplot(jack_bin_est, aes(y = est, x = vars, group = pheno, shape = pheno, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.9)) +
+  scale_color_manual(values = c("grey", "#1e824c")) +
+  geom_errorbar(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.9)) +
+  ggtitle("jackfruit") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal()
+
+jack_bin2 <- ggplot(jack_bin_est2, aes(y = est, x = vars, group = phenophase, shape = phenophase, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.5)) +
+  scale_color_manual(values = c("grey", "#1e824c")) +
+  geom_linerange(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.5)) +
+  ggtitle("jackfruit") +
+  xlab("binary model predictors") +
+  ylab("model coefficient") +
+  guides(shape = "none", color = "none") +
+  # scale_y_discrete(breaks=seq(-0.5, 0.5, 0.2), labels=as.character(seq(-0.5, 0.5, 0.2)))+
+  # ylim(ymin, ymax)+
+  coord_flip() +
+  theme_minimal()
+jack_bin2
+
+mango_bin <- ggplot(mango_bin_est, aes(y = est, x = vars, group = pheno, shape = pheno, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.9)) +
+  geom_errorbar(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.9)) +
+  scale_color_manual(values = c("grey", "#f7ca18")) +
+  ggtitle("mango") +
+  scale_x_discrete(labels = NULL, name = NULL) +
+  # ylim(NA, NA)+
+  coord_flip() +
+  theme_minimal()
+
+mango_bin2 <- ggplot(mango_bin_est2, aes(y = est, x = vars, group = phenophase, shape = phenophase, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.5)) +
+  geom_linerange(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.5)) +
+  scale_color_manual(values = c("grey", "#f7ca18")) +
+  ggtitle("mango") +
+  guides(shape = "none", color = "none") +
+  scale_x_discrete(labels = NULL, name = NULL) +
+  xlab("") +
+  ylab("model coefficient") +
+  # ylim(NA, NA)+
+  coord_flip() +
+  theme_minimal()
+mango_bin2
+
+tam_bin <- ggplot(tam_bin_est, aes(y = est, x = vars, group = phenophase, shape = phenophase, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.9)) +
+  geom_errorbar(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.9)) +
+  scale_color_manual(values = c("grey", "#a6915c")) +
+  ggtitle("tamarind") +
+  scale_x_discrete(labels = NULL, name = NULL) +
+
+  # ylim(NA, NA)+
+  coord_flip() +
+  theme_minimal()
+
+
+tam_bin2 <- ggplot(tam_bin_est2, aes(y = est, x = vars, group = phenophase, shape = phenophase, color = sig)) +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  geom_point(aes(color = sig), position = position_dodge(width = 0.5)) +
+  geom_linerange(aes(x = vars, ymin = lower, ymax = upper, color = sig), position = position_dodge(width = 0.5)) +
+  scale_color_manual(values = c("grey", "#a6915c")) +
+  ggtitle("tamarind") +
+  scale_x_discrete(labels = NULL, name = NULL) +
+  guides(color = "none") +
+  xlab("") +
+  ylab("model coefficient") +
+  # ylim(NA, NA)+
+  coord_flip() +
+  theme_minimal()
+tam_bin2
+
+png("plots/figs/Fig2.png", width = 12, height = 8, units = "in", res = 300)
+(jack_ord + mango_ord + tam_ord) / (jack_bin + mango_bin + tam_bin)
+dev.off()
+
+png("plots/figs/Fig2_noint_Jan24.png", width = 12, height = 8, units = "in", res = 300)
+(jack_ord2 + mango_ord2 + tam_ord2) / (jack_bin2 + mango_bin2 + tam_bin2)
+dev.off()
+```
+
+```{r Figure 2 LOOCV}
+# read all the csvs
+
+# ordinal
+jack.bin.ests_fl <- read.csv("models/jack.bin.ests_fl.csv")
+jack.bin.ests_fr <- read.csv("models/jack.bin.ests_fr.csv")
+jack.bin.std.er_fl <- read.csv("models/jack.bin.std.er_fl.csv")
+jack.bin.std.er_fr <- read.csv("models/jack.bin.std.er_fr.csv")
+
+mango.bin.ests_fl <- read.csv("models/mango.bin.ests_fl.csv")
+mango.bin.ests_fr <- read.csv("models/mango.bin.ests_fr.csv")
+mango.bin.std.er_fl <- read.csv("models/mango.bin.std.er_fl.csv")
+mango.bin.std.er_fr <- read.csv("models/mango.bin.std.er_fr.csv")
+
+tam.bin.ests_fl <- read.csv("models/tam.bin.ests_fl.csv")
+tam.bin.ests_fr <- read.csv("models/tam.bin.ests_fr.csv")
+tam.bin.std.er_fl <- read.csv("models/tam.bin.std.er_fl.csv")
+tam.bin.std.er_fr <- read.csv("models/tam.bin.std.er_fr.csv")
+
+# ordinal
+jack.ord.ests_fl <- read.csv("models/jack.ord.ests_fl.csv")
+jack.ord.ests_fr <- read.csv("models/jack.ord.ests_fr.csv")
+jack.ord.std.er_fl <- read.csv("models/jack.ord.std.er_fl.csv")
+jack.ord.std.er_fr <- read.csv("models/jack.ord.std.er_fr.csv")
+
+mango.ord.ests_fl <- read.csv("models/mango.ord.ests_fl.csv")
+mango.ord.ests_fr <- read.csv("models/mango.ord.ests_fr.csv")
+mango.ord.std.er_fl <- read.csv("models/mango.ord.std.er_fl.csv")
+mango.ord.std.er_fr <- read.csv("models/mango.ord.std.er_fr.csv")
+
+tam.ord.ests_fl <- read.csv("models/tam.ord.ests_fl.csv")
+tam.ord.ests_fr <- read.csv("models/tam.ord.ests_fr.csv")
+tam.ord.std.er_fl <- read.csv("models/tam.ord.std.er_fl.csv")
+tam.ord.std.er_fr <- read.csv("models/tam.ord.std.er_fr.csv")
+
+# binding them
+
+# binary
+all_glmm_bin <- rbind(jack.bin.ests_fl, jack.bin.ests_fr, mango.bin.ests_fl, mango.bin.ests_fr, tam.bin.ests_fl, tam.bin.ests_fr)
+all_glmm_bin$sp <- c(rep("jackfruit", 22), rep("mango", 22), rep("tamarind", 22))
+all_glmm_bin$phenology <- rep(c(rep("flowering", 11), rep("fruiting", 11)), 3)
+all_glmm_bin$mean <- apply(all_glmm_bin[, 2:10], 1, mean)
+all_glmm_bin$sd <- apply(all_glmm_bin[, 2:10], 1, sd)
+
+# binary with std.er
+all_glmm_bin_er <- rbind(jack.bin.std.er_fl, jack.bin.std.er_fr, mango.bin.std.er_fl, mango.bin.std.er_fr, tam.bin.std.er_fl, tam.bin.std.er_fr)
+
+all_glmm_bin_er$sp <- c(rep("jackfruit", 22), rep("mango", 22), rep("tamarind", 22))
+all_glmm_bin_er$phenology <- rep(c(rep("flowering", 11), rep("fruiting", 11)), 3)
+all_glmm_bin_er$mean <- apply(all_glmm_bin_er[, 2:10], 1, mean, na.rm = T)
+
+all_glmm_bin$std.er <- all_glmm_bin_er$mean
+
+all_glmm_bin$sig <- mapply(function(p) ifelse((all_glmm_bin$mean[p] - (1.96 * all_glmm_bin$std.er[p])) >= 0 & (all_glmm_bin$mean[p] - (1.96 * all_glmm_bin$std.er[p])) <= 0, "no", "yes"), p = seq(1:nrow(all_glmm_bin)))
+
+
+# stop-gap fixes for plot - change later
+mango.ord.ests_fl[, 1] <- NULL
+mango.ord.ests_fr[, 1] <- NULL
+jack.ord.ests_fl[, 1] <- NULL
+jack.ord.ests_fr[, 1] <- NULL
+# jack.ord.ests_fl[,2]<-rep(NA, nrow(jack.ord.ests_fl))
+jack.ord.ests_fr[, 2] <- rep(NA, nrow(jack.ord.ests_fr))
+
+# ordinal
+all_glmm_ord <- rbind(jack.ord.ests_fl, jack.ord.ests_fr, mango.ord.ests_fl, mango.ord.ests_fr, tam.ord.ests_fl, tam.ord.ests_fr)
+
+all_glmm_ord$sp <- c(rep("jackfruit", 24), rep("mango", 24), rep("tamarind", 24))
+all_glmm_ord$phenology <- rep(c(rep("flowering", 12), rep("fruiting", 12)), 3)
+all_glmm_ord$mean <- apply(all_glmm_ord[, 2:10], 1, mean, na.rm = T)
+all_glmm_ord$sd <- apply(all_glmm_ord[, 2:10], 1, sd, na.rm = T)
+
+# std error - stop gap fixes
+jack.ord.std.er_fl[, 3] <- rep(NA, nrow(jack.ord.std.er_fl))
+jack.ord.std.er_fr[, 3] <- jack.ord.std.er_fr[, 12]
+jack.ord.std.er_fr[, 12] <- NULL
+jack.ord.ests_fr[, 2] <- rep(NA, nrow(jack.ord.ests_fr))
+mango.ord.std.er_fl[, 4] <- rep(NA, nrow(mango.ord.std.er_fl))
+
+jack.ord.std.er_fl[, 1] <- NULL
+jack.ord.std.er_fr[, 1] <- NULL
+mango.ord.std.er_fl[, 1] <- NULL
+mango.ord.std.er_fr[, 1] <- NULL
+
+all_glmm_ord_er <- rbind(jack.ord.std.er_fl, jack.ord.std.er_fr, mango.ord.std.er_fl, mango.ord.std.er_fr, tam.ord.std.er_fl, tam.ord.std.er_fr)
+
+all_glmm_ord_er$sp <- c(rep("jackfruit", 24), rep("mango", 24), rep("tamarind", 24))
+all_glmm_ord_er$phenology <- rep(c(rep("flowering", 12), rep("fruiting", 12)), 3)
+all_glmm_ord_er$mean <- apply(all_glmm_ord_er[, 2:10], 1, mean, na.rm = T)
+
+all_glmm_ord$std.er <- all_glmm_ord_er$mean
+
+all_glmm_ord$sig <- mapply(function(p) ifelse((all_glmm_ord$mean[p] - (1.96 * all_glmm_ord$std.er[p])) >= 0 & (all_glmm_ord$mean[p] - (1.96 * all_glmm_ord$std.er[p])) <= 0, "no", "yes"), p = seq(1:nrow(all_glmm_ord)))
+
+
+# jack - #1e824c
+# mango - #f7ca18
+# tam - #a6915c
+
+# the plots
+
+newlabs <- c(
+  "intercept", "precipitation", "maximum temperature", "mean soil moisture", "consecutive dry days", "elevation", "aspect", "urbanisation",
+  "precipitation:elevation", "soil moisture:aspect", "dry days:urbanisation"
+)
+
+all_glmm_bin$newlabs <- rep(newlabs, 6)
+all_glmm_bin$newlabs <- factor(all_glmm_bin$newlabs, levels = newlabs)
+
+newlabs_o <- c(
+  "0|1", "1|2", "precipitation", "maximum temperature", "mean soil moisture", "consecutive dry days", "elevation", "aspect", "urbanisation",
+  "precipitation:elevation", "soil moisture:aspect", "dry days:urbanisation"
+)
+all_glmm_ord$newlabs <- rep(newlabs_o, 6)
+all_glmm_ord$newlabs <- factor(all_glmm_ord$newlabs, levels = newlabs_o)
+
+
+library(boot)
+library(ggplot2)
+jack_glmm_bin_loocv <- ggplot(all_glmm_bin[all_glmm_bin$sp == "jackfruit", ], aes(x = newlabs, y = mean, shape = phenology, color = sig)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#1e824c", size = 2) +
+  geom_errorbar(aes(ymin = mean - (1.96 * std.er), ymax = mean + (1.96 * std.er)), position = position_dodge(width = 0.9), col = "#1e824c", width = 0) +
+  coord_flip() +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  ggtitle("Jackfruit") +
+  ylab("Model coefficient") +
+  xlab("Binary predictors") +
+  guides(color = "none") +
+  labs(tag = "d)") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+mango_glmm_bin_loocv <- ggplot(all_glmm_bin[all_glmm_bin$sp == "mango", ], aes(x = newlabs, y = mean, shape = phenology)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#f7ca18", size = 2) +
+  geom_errorbar(aes(ymin = mean - (1.96 * std.er), ymax = mean + (1.96 * std.er)), position = position_dodge(width = 0.9), col = "#f7ca18", width = 0) +
+  labs(tag = "e)") +
+  coord_flip() +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  ggtitle("Mango") +
+  ylab("Model coefficient") +
+  guides(color = "none") +
+  xlab("Binary predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+tam_glmm_bin_loocv <- ggplot(all_glmm_bin[all_glmm_bin$sp == "tamarind", ], aes(x = newlabs, y = mean, shape = phenology)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#a6915c", size = 2) +
+  geom_errorbar(aes(ymin = mean - (1.96 * std.er), ymax = mean + (1.96 * std.er)), position = position_dodge(width = 0.9), col = "#a6915c", width = 0) +
+  coord_flip() +
+  labs(tag = "f)") +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  ggtitle("Tamarind") +
+  ylab("Model coefficient") +
+  xlab("Binary predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+library(gridExtra)
+
+# png("plots/figs/Fig2_loocv_binonly.png", width=16, height=8, units="in", res=300)
+# grid.arrange(jack_glmm_bin_loocv, mango_glmm_bin_loocv, tam_glmm_bin_loocv, ncol=3)
+# dev.off()
+
+
+# ordinal
+jack_glmm_ord_loocv <- ggplot(all_glmm_ord[all_glmm_ord$sp == "jackfruit", ], aes(x = newlabs, y = mean, shape = phenology)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#1e824c", size = 2) +
+  #  geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd),
+  geom_errorbar(aes(ymin = mean - (1.96 * std.er), ymax = mean + (1.96 * std.er)), position = position_dodge(width = 0.9), col = "#1e824c", width = 0) +
+  coord_flip() +
+  labs(tag = "a)") +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  ggtitle("Jackfruit") +
+  ylab("Model coefficient") +
+  xlab("Ordinal predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+mango_glmm_ord_loocv <- ggplot(all_glmm_ord[all_glmm_ord$sp == "mango", ], aes(x = newlabs, y = mean, shape = phenology)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#f7ca18", size = 2) +
+  #  geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd),
+  geom_errorbar(aes(ymin = mean - (1.96 * std.er), ymax = mean + (1.96 * std.er)), position = position_dodge(width = 0.9), col = "#f7ca18", width = 0) +
+  coord_flip() +
+  labs(tag = "b)") +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  ggtitle("Mango") +
+  ylab("Model coefficient") +
+  xlab("Ordinal predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+tam_glmm_ord_loocv <- ggplot(all_glmm_ord[all_glmm_ord$sp == "tamarind", ], aes(x = newlabs, y = mean, shape = phenology)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#a6915c", size = 2) +
+  #  geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd),
+  geom_errorbar(aes(ymin = mean - (1.96 * std.er), ymax = mean + (1.96 * std.er)), position = position_dodge(width = 0.9), col = "#a6915c", width = 0) +
+  coord_flip() +
+  labs(tag = "c)") +
+  geom_hline(yintercept = 0, col = "grey", size = 1.5) +
+  ggtitle("Tamarind") +
+  ylab("Model coefficient") +
+  xlab("Ordinal predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+png("plots/figs/Fig2_loocv_stderJan24.png", width = 16, height = 8, units = "in", res = 300)
+grid.arrange(jack_glmm_ord_loocv, mango_glmm_ord_loocv, tam_glmm_ord_loocv,
+  jack_glmm_bin_loocv, mango_glmm_bin_loocv, tam_glmm_bin_loocv,
+  ncol = 3
+)
+dev.off()
+```
+
+```{r Figure 3}
+# Figure 3: predicted probabilities fixed effects for three species - from ML models
+
+# reading the files
+
+# fl binary
+ml_jack_fl_bin <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Jackfruit_ObsLevel_FNVarsOnly/Jackfruit_ObsLevel_FNVarsOnly/RFImportanceMDA_Jackfruit_ObsLevel_FNVarsOnly_FLBinary.csv")
+ml_mango_fl_bin <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Mango_ObsLevel_FNVarsOnly/Mango_ObsLevel_FNVarsOnly/RFImportanceMDA_Mango_ObsLevel_FNVarsOnly_FLBinary.csv")
+ml_tam_fl_bin <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Tamarind_ObsLevel_FNVarsOnly/Tamarind_ObsLevel_FNVarsOnly/RFImportanceMDA_Tamarind_ObsLevel_FNVarsOnly_FLBinary.csv")
+
+# fr binary
+ml_jack_fr_bin <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Jackfruit_ObsLevel_FNVarsOnly/Jackfruit_ObsLevel_FNVarsOnly/RFImportanceMDA_Jackfruit_ObsLevel_FNVarsOnly_FRBinary.csv")
+ml_mango_fr_bin <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Mango_ObsLevel_FNVarsOnly/Mango_ObsLevel_FNVarsOnly/RFImportanceMDA_Mango_ObsLevel_FNVarsOnly_FRBinary.csv")
+ml_tam_fr_bin <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Tamarind_ObsLevel_FNVarsOnly/Tamarind_ObsLevel_FNVarsOnly/RFImportanceMDA_Tamarind_ObsLevel_FNVarsOnly_FRBinary.csv")
+
+# fl ordinal
+ml_jack_fl_ord <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Jackfruit_ObsLevel_FNVarsOnly/Jackfruit_ObsLevel_FNVarsOnly/CatBoostImportanceMDA_Jackfruit_ObsLevel_FNVarsOnly_FLIntensity.csv")
+ml_mango_fl_ord <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Mango_ObsLevel_FNVarsOnly/Mango_ObsLevel_FNVarsOnly/CatBoostImportanceMDA_Mango_ObsLevel_FNVarsOnly_FLIntensity.csv")
+ml_tam_fl_ord <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Tamarind_ObsLevel_FNVarsOnly/Tamarind_ObsLevel_FNVarsOnly/CatBoostImportanceMDA_Tamarind_ObsLevel_FNVarsOnly_FLIntensity.csv")
+
+# fr ordinal
+ml_jack_fr_ord <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Jackfruit_ObsLevel_FNVarsOnly/Jackfruit_ObsLevel_FNVarsOnly/CatBoostImportanceMDA_Jackfruit_ObsLevel_FNVarsOnly_FRIntensity.csv")
+ml_mango_fr_ord <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Mango_ObsLevel_FNVarsOnly/Mango_ObsLevel_FNVarsOnly/CatBoostImportanceMDA_Mango_ObsLevel_FNVarsOnly_FRIntensity.csv")
+ml_tam_fr_ord <- read.csv("C://Users/krish/Documents/SeasonWatch/MSG/ML_results/Tamarind_ObsLevel_FNVarsOnly/Tamarind_ObsLevel_FNVarsOnly/CatBoostImportanceMDA_Tamarind_ObsLevel_FNVarsOnly_FRIntensity.csv")
+
+# joining
+all_ml_ord <- rbind(ml_jack_fl_ord, ml_jack_fr_ord, ml_mango_fl_ord, ml_mango_fr_ord, ml_tam_fl_ord, ml_tam_fr_ord)
+all_ml_ord$sp <- c(rep("jackfruit", 22), rep("mango", 22), rep("tamarind", 22))
+all_ml_ord$phenology <- rep(c(rep("flowering", 11), rep("fruiting", 11)), 3)
+all_ml_ord$sd <- apply(all_ml_ord[, 3:11], 1, sd)
+all_ml_ord$X <- factor(all_ml_ord$X, levels = c(
+  "FNSum_PCP", "FNMean_MaxTemp", "FNMean_MeanTemp", "FNMean_MinTemp",
+  "FNMean_MeanSM", "FNSum_SolarRad", "FNSum_ConsDryDays", "elev", "slope", "aspect", "light_vals"
+))
+
+
+all_ml_bin <- rbind(ml_jack_fl_bin, ml_jack_fr_bin, ml_mango_fl_bin, ml_mango_fr_bin, ml_tam_fl_bin, ml_tam_fr_bin)
+all_ml_bin$sp <- c(rep("jackfruit", 22), rep("mango", 22), rep("tamarind", 22))
+all_ml_bin$phenology <- rep(c(rep("flowering", 11), rep("fruiting", 11)), 3)
+all_ml_bin$sd <- apply(all_ml_bin[, 3:11], 1, sd)
+all_ml_bin$X <- factor(all_ml_bin$X, levels = c(
+  "FNSum_PCP", "FNMean_MaxTemp", "FNMean_MeanTemp", "FNMean_MinTemp",
+  "FNMean_MeanSM", "FNSum_SolarRad", "FNSum_ConsDryDays", "elev", "slope", "aspect", "light_vals"
+))
+
+# remotes::install_github("coolbutuseless/ggpattern")
+library(ggplot2)
+library(ggpattern)
+
+# jack - #1e824c
+# mango - #f7ca18
+# tam - #a6915c
+
+# jack_ml_ord<-ggplot(all_ml_ord[all_ml_ord$sp=="jackfruit",], aes(x=X, y=Overall..average., fill=phenology))+
+jack_ml_ord <- ggplot(all_ml_ord[all_ml_ord$sp == "jackfruit", ], aes(x = X, y = Overall..average., shape = phenology)) +
+  # geom_bar(stat="identity", position = position_dodge())+
+  geom_point(position = position_dodge(width = 0.9), col = "#1e824c") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd), position = position_dodge()) +
+  coord_flip() +
+  ggtitle("jackfruit") +
+  ylab("variable importance") +
+  xlab("ordinal predictors") #+
+# scale_fill_manual(values=c("#1e824c", "#1e824c"))+
+# geom_col_pattern(aes(pattern_fill=phenology), pattern="stripe", fill="white", colour="#1e824c", position=position_dodge())
+# geom_bar_pattern(stat="identity", pattern_color="white",
+# pattern_fill="black", position=position_dodge(), aes(pattern=phenology))
+
+mango_ml_ord <- ggplot(all_ml_ord[all_ml_ord$sp == "mango", ], aes(x = X, y = Overall..average., fill = phenology)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd), position = position_dodge()) +
+  coord_flip() +
+  ggtitle("mango") +
+  ylab("variable importance") +
+  xlab("ordinal predictors") +
+  # scale_color_manual(values=c("#1e824c", "#1e824c"))+
+  scale_fill_manual(values = c("#f7ca18", "#f7ca18")) +
+  # geom_col_pattern(aes(pattern_fill=phenology), pattern="stripe", fill="white", colour="#1e824c", position=position_dodge())
+  geom_bar_pattern(
+    stat = "identity", pattern_color = "white",
+    pattern_fill = "black", position = position_dodge(), aes(pattern = phenology)
+  )
+
+tam_ml_ord <- ggplot(all_ml_ord[all_ml_ord$sp == "tamarind", ], aes(x = X, y = Overall..average., fill = phenology)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd), position = position_dodge()) +
+  coord_flip() +
+  ggtitle("tamarind") +
+  ylab("variable importance") +
+  xlab("ordinal predictors") +
+  # scale_color_manual(values=c("#1e824c", "#1e824c"))+
+  scale_fill_manual(values = c("#a6915c", "#a6915c")) +
+  # geom_col_pattern(aes(pattern_fill=phenology), pattern="stripe", fill="white", colour="#1e824c", position=position_dodge())
+  geom_bar_pattern(
+    stat = "identity", pattern_color = "white",
+    pattern_fill = "black", position = position_dodge(), aes(pattern = phenology)
+  )
+
+
+jack_ml_bin <- ggplot(all_ml_bin[all_ml_bin$sp == "jackfruit", ], aes(x = X, y = Overall..average., fill = phenology)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd), position = position_dodge()) +
+  coord_flip() +
+  ggtitle("jackfruit") +
+  ylab("variable importance") +
+  xlab("binary predictors") +
+  # scale_color_manual(values=c("#1e824c", "#1e824c"))+
+  scale_fill_manual(values = c("#1e824c", "#1e824c")) +
+  # geom_col_pattern(aes(pattern_fill=phenology), pattern="stripe", fill="white", colour="#1e824c", position=position_dodge())
+  geom_bar_pattern(
+    stat = "identity", pattern_color = "white",
+    pattern_fill = "black", position = position_dodge(), aes(pattern = phenology)
+  )
+
+mango_ml_bin <- ggplot(all_ml_bin[all_ml_bin$sp == "mango", ], aes(x = X, y = Overall..average., fill = phenology)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd), position = position_dodge()) +
+  coord_flip() +
+  ggtitle("mango") +
+  ylab("variable importance") +
+  xlab("binary predictors") +
+  # scale_color_manual(values=c("#1e824c", "#1e824c"))+
+  scale_fill_manual(values = c("#f7ca18", "#f7ca18")) +
+  # geom_col_pattern(aes(pattern_fill=phenology), pattern="stripe", fill="white", colour="#1e824c", position=position_dodge())
+  geom_bar_pattern(
+    stat = "identity", pattern_color = "white",
+    pattern_fill = "black", position = position_dodge(), aes(pattern = phenology)
+  )
+
+tam_ml_bin <- ggplot(all_ml_bin[all_ml_bin$sp == "tamarind", ], aes(x = X, y = Overall..average., fill = phenology)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd), position = position_dodge()) +
+  coord_flip() +
+  ggtitle("tamarind") +
+  ylab("variable importance") +
+  xlab("binary predictors") +
+  # scale_color_manual(values=c("#1e824c", "#1e824c"))+
+  scale_fill_manual(values = c("#a6915c", "#a6915c")) +
+  # geom_col_pattern(aes(pattern_fill=phenology), pattern="stripe", fill="white", colour="#1e824c", position=position_dodge())
+  geom_bar_pattern(
+    stat = "identity", pattern_color = "white",
+    pattern_fill = "black", position = position_dodge(), aes(pattern = phenology)
+  )
+
+library(gridExtra)
+
+png("plots/figs/Fig3_new.png", width = 16, height = 8, units = "in", res = 300)
+grid.arrange(jack_ml_ord, mango_ml_ord, tam_ml_ord,
+  jack_ml_bin, mango_ml_bin, tam_ml_bin,
+  ncol = 3
+)
+dev.off()
+```
+
+```{r Figure 3 12 panels and bars}
+newlabs_ml <- c("precipitation", "minimum temperature", "mean temperature", "maximum temperature", "mean soil moisture", "solar radiation", "consecutive dry days", "elevation", "slope", "aspect", "urbanisation")
+
+all_ml_ord$newlabs <- rep(newlabs_ml, 6)
+all_ml_ord$newlabs <- factor(all_ml_ord$newlabs, levels = newlabs_ml)
+all_ml_bin$newlabs <- rep(newlabs_ml, 6)
+all_ml_bin$newlabs <- factor(all_ml_bin$newlabs, levels = newlabs_ml)
+
+library(ggplot2)
+jack_ml_ord_fl <- ggplot(all_ml_ord[all_ml_ord$sp == "jackfruit" & all_ml_ord$phenology == "flowering", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average.)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#1e824c") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Jackfruit flowering") +
+  ylab("Variable importance") +
+  xlab("Ordinal predictors") +
+  labs(tag = "a)") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+jack_ml_ord_fr <- ggplot(all_ml_ord[all_ml_ord$sp == "jackfruit" & all_ml_ord$phenology == "fruiting", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average.)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#1e824c") +
+  labs(tag = "d)") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Jackfruit fruiting") +
+  ylab("Variable importance") +
+  xlab("Ordinal predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+mango_ml_ord_fl <- ggplot(all_ml_ord[all_ml_ord$sp == "mango" & all_ml_ord$phenology == "flowering", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average., shape = phenology)) +
+  labs(tag = "b)") +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#f7ca18") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Mango flowering") +
+  ylab("Variable importance") +
+  xlab("Ordinal predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+mango_ml_ord_fr <- ggplot(all_ml_ord[all_ml_ord$sp == "mango" & all_ml_ord$phenology == "fruiting", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average., shape = phenology)) +
+  labs(tag = "e)") +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#f7ca18") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Mango fruiting") +
+  ylab("Variable importance") +
+  xlab("Ordinal predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+tam_ml_ord_fl <- ggplot(all_ml_ord[all_ml_ord$sp == "tamarind" & all_ml_ord$phenology == "flowering", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average., shape = phenology)) +
+  labs(tag = "c)") +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#a6915c") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Tamarind flowering") +
+  ylab("Variable importance") +
+  xlab("Ordinal predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+tam_ml_ord_fr <- ggplot(all_ml_ord[all_ml_ord$sp == "tamarind" & all_ml_ord$phenology == "fruiting", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average., shape = phenology)) +
+  labs(tag = "f)") +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#a6915c") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Tamarind fruiting") +
+  ylab("Variable importance") +
+  xlab("Ordinal predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+# binary
+
+jack_ml_bin_fl <- ggplot(all_ml_bin[all_ml_bin$sp == "jackfruit" & all_ml_bin$phenology == "flowering", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average.)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#1e824c") +
+  labs(tag = "g)") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Jackfruit flowering") +
+  ylab("Variable importance") +
+  xlab("Binary predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+jack_ml_bin_fr <- ggplot(all_ml_bin[all_ml_bin$sp == "jackfruit" & all_ml_bin$phenology == "fruiting", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average.)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#1e824c") +
+  labs(tag = "j)") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Jackfruit fruiting") +
+  ylab("Variable importance") +
+  xlab("Binary predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+mango_ml_bin_fl <- ggplot(all_ml_bin[all_ml_bin$sp == "mango" & all_ml_bin$phenology == "flowering", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average., shape = phenology)) +
+  labs(tag = "h)") +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#f7ca18") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Mango flowering") +
+  ylab("Variable importance") +
+  xlab("Binary predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+mango_ml_bin_fr <- ggplot(all_ml_bin[all_ml_bin$sp == "mango" & all_ml_bin$phenology == "fruiting", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average., shape = phenology)) +
+  labs(tag = "k)") +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#f7ca18") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Mango fruiting") +
+  ylab("Variable importance") +
+  xlab("Binary predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+tam_ml_bin_fl <- ggplot(all_ml_bin[all_ml_bin$sp == "tamarind" & all_ml_bin$phenology == "flowering", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average., shape = phenology)) +
+  labs(tag = "i)") +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#a6915c") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Tamarind flowering") +
+  ylab("Variable importance") +
+  xlab("Binary predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+tam_ml_bin_fr <- ggplot(all_ml_bin[all_ml_bin$sp == "tamarind" & all_ml_bin$phenology == "fruiting", ], aes(x = reorder(newlabs, Overall..average.), y = Overall..average., shape = phenology)) +
+  labs(tag = "l)") +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), fill = "#a6915c") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge()
+  ) +
+  coord_flip() +
+  ggtitle("Tamarind fruiting") +
+  ylab("Variable importance") +
+  xlab("Binary predictors") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12))
+
+library(gridExtra)
+png("plots/figs/Fig3_sep_bars_tag.png", width = 12, height = 18, units = "in", res = 300)
+grid.arrange(jack_ml_ord_fl, mango_ml_ord_fl, tam_ml_ord_fl,
+  jack_ml_ord_fr, mango_ml_ord_fr, tam_ml_ord_fr,
+  jack_ml_bin_fl, mango_ml_bin_fl, tam_ml_bin_fl,
+  jack_ml_bin_fr, mango_ml_bin_fr, tam_ml_bin_fr,
+  ncol = 3
+)
+dev.off()
+```
+
+```{r Figure 3 like a coef plot}
+# jack - #1e824c
+# mango - #f7ca18
+# tam - #a6915c
+
+jack_ml_ord_cf <- ggplot(all_ml_ord[all_ml_ord$sp == "jackfruit", ], aes(x = X, y = Overall..average., shape = phenology)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#1e824c") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge(), col = "#1e824c"
+  ) +
+  coord_flip() +
+  ggtitle("jackfruit") +
+  ylab("variable importance") +
+  xlab("ordinal predictors") +
+  theme_minimal()
+
+mango_ml_ord_cf <- ggplot(all_ml_ord[all_ml_ord$sp == "mango", ], aes(x = X, y = Overall..average., shape = phenology)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#f7ca18") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge(), col = "#f7ca18"
+  ) +
+  coord_flip() +
+  ggtitle("mango") +
+  ylab("variable importance") +
+  xlab("ordinal predictors") +
+  theme_minimal()
+
+tam_ml_ord_cf <- ggplot(all_ml_ord[all_ml_ord$sp == "tamarind", ], aes(x = X, y = Overall..average., shape = phenology)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#a6915c") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge(), col = "#a6915c"
+  ) +
+  coord_flip() +
+  ggtitle("tamarind") +
+  ylab("variable importance") +
+  xlab("ordinal predictors") +
+  theme_minimal()
+
+jack_ml_bin_cf <- ggplot(all_ml_bin[all_ml_bin$sp == "jackfruit", ], aes(x = X, y = Overall..average., shape = phenology)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#1e824c") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge(), col = "#1e824c"
+  ) +
+  coord_flip() +
+  ggtitle("jackfruit") +
+  ylab("variable importance") +
+  xlab("binary predictors") +
+  theme_minimal()
+
+mango_ml_bin_cf <- ggplot(all_ml_bin[all_ml_bin$sp == "mango", ], aes(x = X, y = Overall..average., shape = phenology)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#f7ca18") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge(), col = "#f7ca18"
+  ) +
+  coord_flip() +
+  ggtitle("mango") +
+  ylab("variable importance") +
+  xlab("binary predictors") +
+  theme_minimal()
+
+tam_ml_bin_cf <- ggplot(all_ml_bin[all_ml_bin$sp == "tamarind", ], aes(x = X, y = Overall..average., shape = phenology)) +
+  geom_point(position = position_dodge(width = 0.9), col = "#a6915c") +
+  geom_errorbar(aes(ymin = Overall..average. - sd, ymax = Overall..average. + sd),
+    position = position_dodge(), col = "#a6915c"
+  ) +
+  coord_flip() +
+  ggtitle("tamarind") +
+  ylab("variable importance") +
+  xlab("binary predictors") +
+  theme_minimal()
+
+library(gridExtra)
+
+png("plots/figs/Fig3_coefs.png", width = 16, height = 8, units = "in", res = 300)
+grid.arrange(jack_ml_ord_cf, mango_ml_ord_cf, tam_ml_ord_cf,
+  jack_ml_bin_cf, mango_ml_bin_cf, tam_ml_bin_cf,
+  ncol = 3
+)
+dev.off()
+```
+
+```{r Figure 4}
+# Figure 4: Interactions between effects from GLMMs (only significant) (3x3 table - for each species x interaction. Each row - one interaction that is significant - fruiting and flowering. Blank for not significant)
+
+# find the mean, +/-SD of the static variables across all three species
+# we need this for elevation, aspect and light
+
+cont <- rep(seq(-3, 3, 0.05), 3)
+stat <- c(rep(-1, 121), rep(0, 121), rep(1, 121))
+cons <- rep(0, 363)
+
+library(lme4)
+
+# functionalising this plot
+
+all_pars <- c(
+  "FNSum_PCP_cs", "elev_cs", "FNMean_MaxTemp_cs", "FNMean_MeanSM_cs",
+  "FNSum_DryDays_cs", "aspect_cs", "light_cs"
+)
+
+`%nin%` <- Negate(`%in%`)
+
+labs_list <- list(
+  "FNSum_PCP_cs" = "precipitation", "elev_cs" = "elevation",
+  "FNMean_MaxTemp_cs" = "max temperature", "FNMean_MeanSM_cs" = "soil moisture",
+  "FNSum_DryDays_cs" = "dry days", "aspect_cs" = "aspect",
+  "light_cs" = "urbanisation", "User_Tree_id" = "Tree ID"
+)
+
+# parameters are model, temporal variable, static variable
+
+temp_var <- c(rep("FNSum_PCP_cs", 6), rep("FNMean_MeanSM_cs", 6), rep("FNSum_DryDays_cs", 6))
+static_var <- c(rep("elev_cs", 6), rep("aspect_cs", 6), rep("light_cs", 6))
+static_name <- c(rep("elevation", 6), rep("aspect", 6), rep("urbanisation", 6))
+model_list <- list(
+  fl_inter_jack_bin, fl_inter_mango_bin, fl_inter_tam_bin,
+  fr_inter_jack_bin, fr_inter_mango_bin, fr_inter_tam_bin
+)
+model_num <- rep(1:6, 3)
+pheno_var <- rep(c(rep("flowering", 3), rep("fruiting", 3)), 3)
+alph <- c(
+  NA, NA, NA, "a", "b", "c", "d", "e", "f", "g", "h",
+  "i", "j", "k", "l", "m", "n", "o"
+)
+
+library(lme4)
+library(ggplot2)
+int_plot <- function(model, temp, static, static_new, pheno, alph) {
+  cons_pars <- all_pars[which(all_pars %nin% c(temp, static))]
+  newdat <- data.frame(cont, stat, cons, cons, cons, cons, cons, NA)
+  colnames(newdat) <- c(temp, static, cons_pars, "User_Tree_id")
+  # newdat$pred<-predict(model, allow.new.levels=T, newdata=newdat,  level=0)
+  newdat$pred <- predict(model, allow.new.levels = T, newdata = newdat, type = "response", re.form = NA)
+
+  # need to add confidence intervals to plot
+
+  newdat <- newdat[newdat$pred >= 0 & newdat$pred <= 1, ] # making sure that there are no impossible probs
+  newdat[, 2] <- factor(newdat[, 2])
+  temp1 <- sym(temp)
+  static1 <- sym(static)
+  p <- ggplot(newdat, aes(x = !!temp1, y = pred, color = !!static1)) +
+    geom_line(size = 2) +
+    scale_color_manual(values = c("firebrick4", "grey60", "navy")) +
+    ylab(paste(pheno, " probability", sep = "")) +
+    xlab("") +
+    labs(color = static_new, tag = alph) +
+    theme_bw() +
+    theme(
+      axis.title.x = element_text(size = 16),
+      axis.title.y = element_text(size = 16)
+    )
+  return(p)
+}
+
+
+plotlist <- mapply(function(x) {
+  int_plot(
+    model = model_list[[model_num[x]]], temp = temp_var[x],
+    static = static_var[x], pheno = pheno_var[x]
+  )
+}, x = 1:18)
+
+x <- 1
+p1 <- ggplot() +
+  geom_blank() +
+  theme_bw() +
+  ggtitle("jackfruit") +
+  guides(colour = "none") +
+  ylab("flowering probability") +
+  xlab("")
+x <- 2
+p2 <- ggplot() +
+  geom_blank() +
+  ggtitle("mango") +
+  xlab("precipitation") +
+  ylab("") +
+  theme_bw()
+
+x <- 3
+p3 <- ggplot() +
+  geom_blank() +
+  ggtitle("tamarind") +
+  xlab("") +
+  ylab("") +
+  theme_bw()
+
+x <- 4
+p4 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x],
+  static = static_var[x], static_new = static_name[x], pheno = pheno_var[x], alph = alph[x]
+) +
+  guides(colour = "none")
+
+x <- 5
+p5 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x],
+  static = static_var[x], static_new = static_name[x], pheno = pheno_var[x], alph = alph[x]
+) +
+  guides(colour = "none") + xlab("precipitation") + ylab("")
+
+x <- 6 # this needs to be blank
+p6 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x],
+  static = static_var[x], static_new = static_name[x], pheno = pheno_var[x], alph = alph[x]
+) +
+  geom_rect(aes(xmin = -3, xmax = 3, ymin = 0, ymax = 2),
+    fill = "grey100", color = "grey100"
+  ) + ylab("") + theme_void() + xlab("")
+
+# p6<-ggplot()+geom_blank()+guides(fill=guide_legend(override.aes = list(alpha=1)))
+
+x <- 7
+p7 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x],
+  static = static_var[x], static_new = static_name[x], pheno = pheno_var[x], alph = alph[x]
+) +
+  guides(colour = "none")
+x <- 8
+p8 <- ggplot() +
+  geom_blank() +
+  xlab("soil moisture") +
+  ylab("") +
+  guides(colour = "none") +
+  geom_text(x = 0.5, y = 0.5, label = "n.s.") +
+  theme_bw() +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16)
+  )
+x <- 9
+p9 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x],
+  static = static_var[x], static_new = static_name[x], alph = alph[x], pheno = pheno_var[x]
+) + ylab("")
+x <- 10
+p10 <- ggplot() +
+  geom_blank() +
+  ylab("fruiting probability") +
+  xlab("") +
+  theme_bw() +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16)
+  )
+
+x <- 11
+p11 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x],
+  static = static_var[x], static_new = static_name[x], pheno = pheno_var[x], alph = alph[x]
+) +
+  guides(colour = "none") + xlab("soil moisture") + ylab("")
+x <- 12
+p12 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x],
+  static = static_var[x], static_new = static_name[x], alph = alph[x], pheno = pheno_var[x]
+) + ylab("")
+x <- 13
+p13 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x], alph = alph[x],
+  static = static_var[x], static_new = static_name[x], pheno = pheno_var[x]
+) + guides(colour = "none")
+x <- 14
+p14 <- ggplot() +
+  geom_blank() +
+  xlab("consecutive dry days") +
+  ylab("") +
+  theme_bw() +
+  theme(
+    axis.title.x = element_text(size = 16),
+    axis.title.y = element_text(size = 16)
+  )
+x <- 15
+p15 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x], alph = alph[x],
+  static = static_var[x], static_new = static_name[x], pheno = pheno_var[x]
+) + ylab("")
+x <- 16
+p16 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x],
+  static = static_var[x], static_new = static_name[x], alph = alph[x], pheno = pheno_var[x]
+) + guides(colour = "none")
+x <- 17
+p17 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x], alph = alph[x],
+  static = static_var[x], static_new = static_name[x], pheno = pheno_var[x]
+) +
+  guides(colour = "none") + xlab("consecutive dry days") + ylab("")
+x <- 18
+p18 <- int_plot(
+  model = model_list[[model_num[x]]], temp = temp_var[x], alph = alph[x],
+  static = static_var[x], static_new = static_name[x], pheno = pheno_var[x]
+) + ylab("")
+
+
+library(gridExtra)
+png("plots/figs/Fig4_new.png", width = 12, height = 16, units = "in", res = 300)
+grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9,
+  p10, p11, p12, p13, p14, p15, p16, p17, p18,
+  ncol = 3, widths = c(10, 10, 12.5)
+)
+
+dev.off()
+
+png("plots/figs/Fig4_noline1.png", width = 12, height = 16, units = "in", res = 300)
+grid.arrange(p4, p5, p6, p7, p8, p9,
+  p10, p11, p12, p13, p14, p15, p16, p17, p18,
+  ncol = 3, widths = c(10, 10, 12.5)
+)
+
+dev.off()
+```
+
+for(i in 1:2){
+  x<-i
+  px<-"x"
+  assign(px, paste0("p", x, sep=""))
+  #px<-(paste("p", x, sep=""))
+  eval(as.symbol(px))<-int_plot(model=model_list[[model_num[x]]], temp=temp_var[x],
+                            static=static_var[x], pheno=pheno_var[x])
+}
+
+jack_fr_elev_pred<-predict(fr_inter_jack_bin, allow.new.levels=T,
+                           #terms=c("FNSum_PCP_cs", "elev_cs"), 
+                           newdata=data.frame("FNSum_PCP_cs"=cont, "elev_cs"=stat,
+                                              "FNMean_MaxTemp_cs"=cons, "FNMean_MeanSM_cs"= cons,
+                                              "FNSum_DryDays_cs"=cons, "aspect_cs"=cons, "light_cs"=cons,
+                                              "User_Tree_id"=mean(sw_spat_rescale$User_Tree_id)))
+
+ggplot()+geom_line(aes(x=cont, y=jack_fr_elev_pred, color=factor(stat)), size=2)
+
+library(sjPlot)
+#jack_fl_elev<-plot_model(fl_inter_jack_bin, terms=c("FNSum_PCP_cs", "elev_cs"), type="pred")+ggtitle("jackfruit")
+jack_fr_elev<-plot_model(fr_inter_jack_bin, terms=c("FNSum_PCP_cs", "elev_cs"), type="pred")+ggtitle("")
+jack_fl_aspect<-plot_model(fl_inter_jack_bin, terms=c("FNMean_MeanSM_cs", "aspect_cs"), type="pred")+ggtitle("")
+#jack_fr_aspect (gap)
+
+jack_fl_light<-plot_model(fl_inter_jack_bin, terms=c("FNSum_DryDays_cs", "light_cs"), type="pred", mdrt.values = "minmax")+ggtitle("jackfruit")+ylab("flowering probability")
+
+jack_fr_light<-plot_model(fr_inter_jack_bin, terms=c("FNSum_DryDays_cs", "light_cs"), type="pred")+ggtitle("")
+
+#mango_fl_elev<-plot_model(fl_inter_mango_bin, terms=c("FNSum_PCP_cs", "elev_cs"), type="pred")+ggtitle("mango")
+mango_fr_elev<-plot_model(fr_inter_mango_bin, terms=c("FNSum_PCP_cs", "elev_cs"), type="pred")+ggtitle("")
+#mango_fl_aspect<-plot_model(fl_inter_mango_bin, terms=c("FNMean_MeanSM_cs", "aspect_cs"), type="pred")+ggtitle("")
+mango_fr_aspect<-plot_model(fr_inter_mango_bin, terms=c("FNMean_MeanSM_cs", "aspect_cs"), type="pred")+ggtitle("")
+#mango_fl_light<-plot_model(fl_inter_mango_bin, terms=c("FNSum_DryDays_cs", "light_cs"), type="pred")+ggtitle("")
+mango_fr_light<-plot_model(fr_inter_mango_bin, terms=c("FNSum_DryDays_cs", "light_cs"), type="pred")+ggtitle("")
+
+
+#tam_fl_elev (gap)
+#tam_fr_elev (gap)
+tam_fl_aspect<-plot_model(fl_inter_tam_bin, terms=c("FNMean_MeanSM_cs", "aspect_cs"), type="pred")+ggtitle("")
+tam_fr_aspect<-plot_model(fr_inter_tam_bin, terms=c("FNMean_MeanSM_cs", "aspect_cs"), type="pred")+ggtitle("")
+tam_fl_light<-plot_model(fl_inter_tam_bin, terms=c("FNSum_DryDays_cs", "light_cs"), type="pred")+ggtitle("tamarind")
+tam_fr_light<-plot_model(fr_inter_tam_bin, terms=c("FNSum_DryDays_cs", "light_cs"), type="pred")+ggtitle("")
+
+#png("plots/figs/Fig4_fl.png", width=12, height =12, units="in", res=300)
+png("plots/figs/Fig4.png", width=12, height =16, units="in", res=300)
+(jack_fl_light+plot_spacer()+tam_fl_light)/(jack_fr_light+mango_fr_light+tam_fr_light)/(plot_spacer()+plot_spacer()+plot_spacer())/(jack_fr_elev+mango_fr_elev+plot_spacer())/(jack_fl_aspect+plot_spacer()+tam_fl_aspect)/(plot_spacer()+mango_fr_aspect+tam_fr_aspect)
+dev.off()
+
+plotlist[[3]]
+
+p7
+
+
+```{r Figure 5}
+# Figure 5: hotspot analysis from Carina - of environmental variables - where do we need more observations from - data gaps
+```
+
+```{r Table S2 - User ID random effect}
+fl_jack_bin_usr2 <- readRDS("models/fl_jack_bin_usr.rds")
+fl_mango_bin_usr2 <- readRDS("models/fl_mango_bin_usr.rds")
+fl_tam_bin_usr2 <- readRDS("models/fl_tam_bin_usr.rds")
+
+library(sjPlot)
+tab_model(fl_jack_bin_usr2, fl_mango_bin_usr2, fl_tam_bin_usr2,
+  transform = NULL, auto.label = FALSE, collapse.ci = TRUE,
+  file = "models/fl_all_usr.xls"
+)
+
+fr_jack_bin_usr2 <- readRDS("models/fr_jack_bin_usr.rds")
+fr_mango_bin_usr2 <- readRDS("models/fr_mango_bin_usr.rds")
+fr_tam_bin_usr2 <- readRDS("models/fr_tam_bin_usr.rds")
+
+tab_model(fr_jack_bin_usr2, fr_mango_bin_usr2, fr_tam_bin_usr2,
+  transform = NULL, auto.label = FALSE, collapse.ci = TRUE,
+  file = "models/fr_all_usr.xls"
+)
+```
+```{r Table S3 monthly predictors}
+fl_jack_bin_mn <- readRDS("models/fl_jack_bin_mn.rds")
+fl_mango_bin_mn <- readRDS("models/fl_mango_bin_mn.rds")
+fl_tam_bin_mn <- readRDS("models/fl_tam_bin_mn.rds")
+
+library(sjPlot)
+tab_model(fl_jack_bin_mn, fl_mango_bin_mn, fl_tam_bin_mn,
+  transform = NULL, auto.label = FALSE, collapse.ci = TRUE,
+  file = "models/fl_all_mn.xls"
+)
+
+fr_jack_bin_mn <- readRDS("models/fr_jack_bin_mn.rds")
+fr_mango_bin_mn <- readRDS("models/fr_mango_bin_mn.rds")
+fr_tam_bin_mn <- readRDS("models/fr_tam_bin_mn.rds")
+
+tab_model(fr_jack_bin_mn, fr_mango_bin_mn, fr_tam_bin_mn,
+  transform = NULL, auto.label = FALSE, collapse.ci = TRUE,
+  file = "models/fr_all_mn.xls"
+)
+```
+```{r Table S4 loc time}
+fl_inter_jack_bin_loc_time <- readRDS("models/fl_inter_jack_bin_loc_time.rds")
+fl_inter_mango_bin_loc_time <- readRDS("models/fl_inter_mango_bin_loc_time.rds")
+fl_inter_tam_bin_loc_time <- readRDS("models/fl_inter_tam_bin_loc_time.rds")
+
+fr_inter_jack_bin_loc_time <- readRDS("models/fr_inter_jack_bin_loc_time.rds")
+fr_inter_mango_bin_loc_time <- readRDS("models/fr_inter_mango_bin_loc_time.rds")
+fr_inter_tam_bin_loc_time <- readRDS("models/fr_inter_tam_bin_loc_time.rds")
+
+library(lme4)
+library(performance)
+
+png("plots/fl_inter_jack_bin_loc_time_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(fl_inter_jack_bin_loc_time)
+dev.off()
+
+png("plots/fl_inter_mango_bin_loc_time_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(fl_inter_mango_bin_loc_time)
+dev.off()
+
+png("plots/fl_inter_tam_bin_loc_time_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(fl_inter_tam_bin_loc_time)
+dev.off()
+
+png("plots/fr_inter_jack_bin_loc_time_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(fr_inter_jack_bin_loc_time)
+dev.off()
+
+png("plots/fr_inter_mango_bin_loc_time_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(fr_inter_mango_bin_loc_time)
+dev.off()
+
+png("plots/fr_inter_tam_bin_loc_time_diag.png", width = 8, height = 12, units = "in", res = 300)
+check_model(fr_inter_tam_bin_loc_time)
+dev.off()
+
+
+library(sjPlot)
+tab_model(fl_inter_jack_bin_loc_time, fl_inter_mango_bin_loc_time, fl_inter_tam_bin_loc_time,
+  transform = NULL, auto.label = FALSE, collapse.ci = TRUE,
+  file = "models/fl_all_loc_time.xls"
+)
+
+fr_jack_bin_mn <- readRDS("models/fr_jack_bin_mn.rds")
+fr_mango_bin_mn <- readRDS("models/fr_mango_bin_mn.rds")
+fr_tam_bin_mn <- readRDS("models/fr_tam_bin_mn.rds")
+
+tab_model(fr_inter_jack_bin_loc_time, fr_inter_mango_bin_loc_time, fr_inter_tam_bin_loc_time,
+  transform = NULL, auto.label = FALSE, collapse.ci = TRUE,
+  file = "models/fr_all_loc_time.xls"
+)
+```
